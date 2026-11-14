@@ -1,0 +1,2448 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FindBack Claims API",
+    "version": "0.1.0-proposal",
+    "description": "Design proposal dated 2026-11-14; not implemented or team approved. Shapes authoritative here; permission/state rules in claims-contract.md must be updated together. UUID, Post mapping, version migration, Return workflow, text-only evidence, no default admin override and retry policy require integration agreement. All operations require active authenticated user. Actor comes from token; client actor/status/role fields forbidden. Unknown query parameters return 422; only listMyClaims accepts declared queries. JSON objects reject unknown properties. Strings are trimmed before length validation. Responses including errors are no-store. State invariants and lock order Post -> Claim -> Return: companion contract."
+  },
+  "tags": [
+    {
+      "name": "Claims",
+      "description": "Private ownership verification and receipt confirmation."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/claims": {
+      "post": {
+        "tags": [
+          "Claims"
+        ],
+        "operationId": "createClaim",
+        "summary": "Create an ownership claim",
+        "description": "Active user, visible FOUND post accepting claims, actor != owner. Actor comes from token. Atomically create PENDING claim, text evidence, audit and outbox. Duplicate active claim per claimant/post is 409. New ID after REJECTED allowed only if post remains eligible. One APPROVED/RETURNED winner per post. No uploads or file paths. Business rules: claims-contract.md sections 2, 4, 6.",
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Location": {
+                "description": "URI of the created claim.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^/api/v1/claims/[0-9a-fA-F-]{36}$"
+                },
+                "example": "/api/v1/claims/c2000000-0000-4000-8000-000000000001"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimSummary"
+                },
+                "example": {
+                  "id": "c2000000-0000-4000-8000-000000000001",
+                  "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                  "claimant_id": "a2000000-0000-4000-8000-000000000001",
+                  "status": "PENDING",
+                  "version": 1,
+                  "created_at": "2026-11-14T03:00:00Z",
+                  "updated_at": "2026-11-14T03:00:00Z",
+                  "decided_by": null,
+                  "decided_at": null,
+                  "rejection_reason": null,
+                  "returned_by": null,
+                  "returned_at": null,
+                  "return_summary": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401: UNAUTHENTICATED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "UNAUTHENTICATED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "UNAUTHENTICATED": {
+                    "value": {
+                      "error": {
+                        "code": "UNAUTHENTICATED",
+                        "message": "Request cannot be processed: UNAUTHENTICATED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403: ACCOUNT_FORBIDDEN, SELF_CLAIM_FORBIDDEN. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "ACCOUNT_FORBIDDEN",
+                                "SELF_CLAIM_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ACCOUNT_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "ACCOUNT_FORBIDDEN",
+                        "message": "Request cannot be processed: ACCOUNT_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "SELF_CLAIM_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "SELF_CLAIM_FORBIDDEN",
+                        "message": "Request cannot be processed: SELF_CLAIM_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404: POST_NOT_FOUND. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "POST_NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "POST_NOT_FOUND": {
+                    "value": {
+                      "error": {
+                        "code": "POST_NOT_FOUND",
+                        "message": "Request cannot be processed: POST_NOT_FOUND",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409: DUPLICATE_ACTIVE_CLAIM, POST_NOT_CLAIMABLE, POST_ALREADY_ASSIGNED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "DUPLICATE_ACTIVE_CLAIM",
+                                "POST_NOT_CLAIMABLE",
+                                "POST_ALREADY_ASSIGNED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "DUPLICATE_ACTIVE_CLAIM": {
+                    "value": {
+                      "error": {
+                        "code": "DUPLICATE_ACTIVE_CLAIM",
+                        "message": "Request cannot be processed: DUPLICATE_ACTIVE_CLAIM",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "POST_NOT_CLAIMABLE": {
+                    "value": {
+                      "error": {
+                        "code": "POST_NOT_CLAIMABLE",
+                        "message": "Request cannot be processed: POST_NOT_CLAIMABLE",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "POST_ALREADY_ASSIGNED": {
+                    "value": {
+                      "error": {
+                        "code": "POST_ALREADY_ASSIGNED",
+                        "message": "Request cannot be processed: POST_ALREADY_ASSIGNED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422: VALIDATION_ERROR, POST_TYPE_NOT_FOUND. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "VALIDATION_ERROR",
+                                "POST_TYPE_NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request cannot be processed: VALIDATION_ERROR",
+                        "request_id": "req-example-001",
+                        "details": [
+                          {
+                            "field": "body.reason",
+                            "issue": "Must not be blank."
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "POST_TYPE_NOT_FOUND": {
+                    "value": {
+                      "error": {
+                        "code": "POST_TYPE_NOT_FOUND",
+                        "message": "Request cannot be processed: POST_TYPE_NOT_FOUND",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClaimRequest"
+              },
+              "example": {
+                "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                "evidence_description": "Synthetic evidence text for contract examples only."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/claims/me": {
+      "get": {
+        "tags": [
+          "Claims"
+        ],
+        "operationId": "listMyClaims",
+        "summary": "List claims related to current user",
+        "description": "Filter permission before pagination. Order created_at DESC, id DESC. Beyond last page returns empty items and has_next=false. No evidence. Offset pagination is not a snapshot. Unknown query parameters return 422. Register /me before /{id}.",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "c2000000-0000-4000-8000-000000000001",
+                      "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                      "claimant_id": "a2000000-0000-4000-8000-000000000001",
+                      "status": "PENDING",
+                      "version": 1,
+                      "created_at": "2026-11-14T03:00:00Z",
+                      "updated_at": "2026-11-14T03:00:00Z",
+                      "decided_by": null,
+                      "decided_at": null,
+                      "rejection_reason": null,
+                      "returned_by": null,
+                      "returned_at": null,
+                      "return_summary": null
+                    }
+                  ],
+                  "page": 1,
+                  "page_size": 20,
+                  "has_next": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401: UNAUTHENTICATED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "UNAUTHENTICATED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "UNAUTHENTICATED": {
+                    "value": {
+                      "error": {
+                        "code": "UNAUTHENTICATED",
+                        "message": "Request cannot be processed: UNAUTHENTICATED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403: ACCOUNT_FORBIDDEN. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "ACCOUNT_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ACCOUNT_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "ACCOUNT_FORBIDDEN",
+                        "message": "Request cannot be processed: ACCOUNT_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422: VALIDATION_ERROR. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "VALIDATION_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request cannot be processed: VALIDATION_ERROR",
+                        "request_id": "req-example-001",
+                        "details": [
+                          {
+                            "field": "body.reason",
+                            "issue": "Must not be blank."
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "relation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claimant",
+                "reviewer",
+                "all"
+              ],
+              "default": "claimant"
+            },
+            "description": "reviewer = associated FOUND post owner; all = deduplicated union; never global admin access."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ClaimStatus"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/claims/{id}": {
+      "get": {
+        "tags": [
+          "Claims"
+        ],
+        "operationId": "getClaim",
+        "summary": "Read claim and private evidence",
+        "description": "Only claimant or owner of the associated FOUND post. Unrelated users, including admins, receive the same 404 as missing claims. No file paths, URLs or competing claim data. No request body or query parameters.",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetail"
+                },
+                "example": {
+                  "id": "c2000000-0000-4000-8000-000000000001",
+                  "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                  "claimant_id": "a2000000-0000-4000-8000-000000000001",
+                  "status": "PENDING",
+                  "version": 1,
+                  "created_at": "2026-11-14T03:00:00Z",
+                  "updated_at": "2026-11-14T03:00:00Z",
+                  "decided_by": null,
+                  "decided_at": null,
+                  "rejection_reason": null,
+                  "returned_by": null,
+                  "returned_at": null,
+                  "return_summary": null,
+                  "evidence": [
+                    {
+                      "id": "e2000000-0000-4000-8000-000000000001",
+                      "private_content": "Synthetic evidence text for contract examples only.",
+                      "created_at": "2026-11-14T03:00:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401: UNAUTHENTICATED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "UNAUTHENTICATED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "UNAUTHENTICATED": {
+                    "value": {
+                      "error": {
+                        "code": "UNAUTHENTICATED",
+                        "message": "Request cannot be processed: UNAUTHENTICATED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403: ACCOUNT_FORBIDDEN. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "ACCOUNT_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ACCOUNT_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "ACCOUNT_FORBIDDEN",
+                        "message": "Request cannot be processed: ACCOUNT_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404: CLAIM_NOT_FOUND. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_NOT_FOUND": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_NOT_FOUND",
+                        "message": "Request cannot be processed: CLAIM_NOT_FOUND",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422: VALIDATION_ERROR. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "VALIDATION_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request cannot be processed: VALIDATION_ERROR",
+                        "request_id": "req-example-001",
+                        "details": [
+                          {
+                            "field": "body.reason",
+                            "issue": "Must not be blank."
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Claim UUID. Missing and non-readable claims both return CLAIM_NOT_FOUND.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/claims/{id}/approve": {
+      "patch": {
+        "tags": [
+          "Claims"
+        ],
+        "operationId": "approveClaim",
+        "summary": "Approve a pending claim",
+        "description": "Associated FOUND post owner AND actor != claimant. Admin role alone grants no permission. PENDING only; expected_version must match; evidence required. Post must be eligible with no other APPROVED/RETURNED winner. Set decision metadata and increment version. Do not create Return or close post. Keep competing PENDING claims unchanged. Repeated PATCH after transition is 409. No query parameters.",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimSummary"
+                },
+                "example": {
+                  "id": "c2000000-0000-4000-8000-000000000001",
+                  "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                  "claimant_id": "a2000000-0000-4000-8000-000000000001",
+                  "status": "APPROVED",
+                  "version": 2,
+                  "created_at": "2026-11-14T03:00:00Z",
+                  "updated_at": "2026-11-14T03:05:00Z",
+                  "decided_by": "b2000000-0000-4000-8000-000000000001",
+                  "decided_at": "2026-11-14T03:05:00Z",
+                  "rejection_reason": null,
+                  "returned_by": null,
+                  "returned_at": null,
+                  "return_summary": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401: UNAUTHENTICATED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "UNAUTHENTICATED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "UNAUTHENTICATED": {
+                    "value": {
+                      "error": {
+                        "code": "UNAUTHENTICATED",
+                        "message": "Request cannot be processed: UNAUTHENTICATED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403: ACCOUNT_FORBIDDEN, CLAIM_ACTION_FORBIDDEN. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "ACCOUNT_FORBIDDEN",
+                                "CLAIM_ACTION_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ACCOUNT_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "ACCOUNT_FORBIDDEN",
+                        "message": "Request cannot be processed: ACCOUNT_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "CLAIM_ACTION_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_ACTION_FORBIDDEN",
+                        "message": "Request cannot be processed: CLAIM_ACTION_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404: CLAIM_NOT_FOUND. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_NOT_FOUND": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_NOT_FOUND",
+                        "message": "Request cannot be processed: CLAIM_NOT_FOUND",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409: CLAIM_STATE_CONFLICT, CLAIM_VERSION_CONFLICT, POST_NOT_CLAIMABLE, POST_ALREADY_ASSIGNED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_STATE_CONFLICT",
+                                "CLAIM_VERSION_CONFLICT",
+                                "POST_NOT_CLAIMABLE",
+                                "POST_ALREADY_ASSIGNED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_STATE_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_STATE_CONFLICT",
+                        "message": "Request cannot be processed: CLAIM_STATE_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "CLAIM_VERSION_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_VERSION_CONFLICT",
+                        "message": "Request cannot be processed: CLAIM_VERSION_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "POST_NOT_CLAIMABLE": {
+                    "value": {
+                      "error": {
+                        "code": "POST_NOT_CLAIMABLE",
+                        "message": "Request cannot be processed: POST_NOT_CLAIMABLE",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "POST_ALREADY_ASSIGNED": {
+                    "value": {
+                      "error": {
+                        "code": "POST_ALREADY_ASSIGNED",
+                        "message": "Request cannot be processed: POST_ALREADY_ASSIGNED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422: VALIDATION_ERROR, EVIDENCE_REQUIRED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "VALIDATION_ERROR",
+                                "EVIDENCE_REQUIRED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request cannot be processed: VALIDATION_ERROR",
+                        "request_id": "req-example-001",
+                        "details": [
+                          {
+                            "field": "body.reason",
+                            "issue": "Must not be blank."
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "EVIDENCE_REQUIRED": {
+                    "value": {
+                      "error": {
+                        "code": "EVIDENCE_REQUIRED",
+                        "message": "Request cannot be processed: EVIDENCE_REQUIRED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveClaimRequest"
+              },
+              "example": {
+                "expected_version": 1
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Claim UUID. Missing and non-readable claims both return CLAIM_NOT_FOUND.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/claims/{id}/reject": {
+      "patch": {
+        "tags": [
+          "Claims"
+        ],
+        "operationId": "rejectClaim",
+        "summary": "Reject a pending claim",
+        "description": "Associated FOUND post owner AND actor != claimant. PENDING only; matching expected_version and trimmed nonblank reason required. Set metadata and increment version. Residual PENDING claims may be rejected after post closes or another claimant wins. Do not overwrite decisions. Repeated PATCH is 409. No query parameters.",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimSummary"
+                },
+                "example": {
+                  "id": "c2000000-0000-4000-8000-000000000001",
+                  "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                  "claimant_id": "a2000000-0000-4000-8000-000000000001",
+                  "status": "REJECTED",
+                  "version": 2,
+                  "created_at": "2026-11-14T03:00:00Z",
+                  "updated_at": "2026-11-14T03:05:00Z",
+                  "decided_by": "b2000000-0000-4000-8000-000000000001",
+                  "decided_at": "2026-11-14T03:05:00Z",
+                  "rejection_reason": "Insufficient information to verify ownership.",
+                  "returned_by": null,
+                  "returned_at": null,
+                  "return_summary": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401: UNAUTHENTICATED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "UNAUTHENTICATED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "UNAUTHENTICATED": {
+                    "value": {
+                      "error": {
+                        "code": "UNAUTHENTICATED",
+                        "message": "Request cannot be processed: UNAUTHENTICATED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403: ACCOUNT_FORBIDDEN, CLAIM_ACTION_FORBIDDEN. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "ACCOUNT_FORBIDDEN",
+                                "CLAIM_ACTION_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ACCOUNT_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "ACCOUNT_FORBIDDEN",
+                        "message": "Request cannot be processed: ACCOUNT_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "CLAIM_ACTION_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_ACTION_FORBIDDEN",
+                        "message": "Request cannot be processed: CLAIM_ACTION_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404: CLAIM_NOT_FOUND. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_NOT_FOUND": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_NOT_FOUND",
+                        "message": "Request cannot be processed: CLAIM_NOT_FOUND",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409: CLAIM_STATE_CONFLICT, CLAIM_VERSION_CONFLICT. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_STATE_CONFLICT",
+                                "CLAIM_VERSION_CONFLICT"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_STATE_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_STATE_CONFLICT",
+                        "message": "Request cannot be processed: CLAIM_STATE_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "CLAIM_VERSION_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_VERSION_CONFLICT",
+                        "message": "Request cannot be processed: CLAIM_VERSION_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422: VALIDATION_ERROR. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "VALIDATION_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request cannot be processed: VALIDATION_ERROR",
+                        "request_id": "req-example-001",
+                        "details": [
+                          {
+                            "field": "body.reason",
+                            "issue": "Must not be blank."
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectClaimRequest"
+              },
+              "example": {
+                "expected_version": 1,
+                "reason": "Insufficient information to verify ownership."
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Claim UUID. Missing and non-readable claims both return CLAIM_NOT_FOUND.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/claims/{id}/complete": {
+      "patch": {
+        "tags": [
+          "Claims"
+        ],
+        "operationId": "completeClaim",
+        "summary": "Claimant confirms receipt",
+        "description": "Only claimant; owner/admin cannot confirm on their behalf. APPROVED claim, matching expected_version, receipt_confirmed=true, existing Return HANDED_OVER. Resolve Return by claim_id. Atomically confirm Return, mark Claim RETURNED with matching actor/time, increment version, close FOUND post, audit and outbox. Roll back all on any failure. Do not fabricate Return or skip stages. Deleted/moderated/inconsistent Post returns POST_STATE_CONFLICT. Repeat is 409, no duplicate events. Arrangement/hand-over APIs are external dependencies beyond these six endpoints. No query parameters.",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimSummary"
+                },
+                "example": {
+                  "id": "c2000000-0000-4000-8000-000000000001",
+                  "found_post_id": "f2000000-0000-4000-8000-000000000001",
+                  "claimant_id": "a2000000-0000-4000-8000-000000000001",
+                  "status": "RETURNED",
+                  "version": 5,
+                  "created_at": "2026-11-14T03:00:00Z",
+                  "updated_at": "2026-11-14T05:00:00Z",
+                  "decided_by": "b2000000-0000-4000-8000-000000000001",
+                  "decided_at": "2026-11-14T03:05:00Z",
+                  "rejection_reason": null,
+                  "returned_by": "a2000000-0000-4000-8000-000000000001",
+                  "returned_at": "2026-11-14T05:00:00Z",
+                  "return_summary": {
+                    "id": "d2000000-0000-4000-8000-000000000001",
+                    "status": "CONFIRMED",
+                    "handed_over_at": "2026-11-14T04:55:00Z",
+                    "confirmed_at": "2026-11-14T05:00:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401: UNAUTHENTICATED. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "UNAUTHENTICATED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "UNAUTHENTICATED": {
+                    "value": {
+                      "error": {
+                        "code": "UNAUTHENTICATED",
+                        "message": "Request cannot be processed: UNAUTHENTICATED",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403: ACCOUNT_FORBIDDEN, CLAIM_ACTION_FORBIDDEN. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "ACCOUNT_FORBIDDEN",
+                                "CLAIM_ACTION_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ACCOUNT_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "ACCOUNT_FORBIDDEN",
+                        "message": "Request cannot be processed: ACCOUNT_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "CLAIM_ACTION_FORBIDDEN": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_ACTION_FORBIDDEN",
+                        "message": "Request cannot be processed: CLAIM_ACTION_FORBIDDEN",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404: CLAIM_NOT_FOUND. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_NOT_FOUND": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_NOT_FOUND",
+                        "message": "Request cannot be processed: CLAIM_NOT_FOUND",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409: CLAIM_STATE_CONFLICT, CLAIM_VERSION_CONFLICT, RETURN_NOT_READY, POST_STATE_CONFLICT. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CLAIM_STATE_CONFLICT",
+                                "CLAIM_VERSION_CONFLICT",
+                                "RETURN_NOT_READY",
+                                "POST_STATE_CONFLICT"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "CLAIM_STATE_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_STATE_CONFLICT",
+                        "message": "Request cannot be processed: CLAIM_STATE_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "CLAIM_VERSION_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "CLAIM_VERSION_CONFLICT",
+                        "message": "Request cannot be processed: CLAIM_VERSION_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "RETURN_NOT_READY": {
+                    "value": {
+                      "error": {
+                        "code": "RETURN_NOT_READY",
+                        "message": "Request cannot be processed: RETURN_NOT_READY",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  },
+                  "POST_STATE_CONFLICT": {
+                    "value": {
+                      "error": {
+                        "code": "POST_STATE_CONFLICT",
+                        "message": "Request cannot be processed: POST_STATE_CONFLICT",
+                        "request_id": "req-example-001",
+                        "details": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "422: VALIDATION_ERROR. Recovery and precedence: claims-contract.md section 6.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Do not store private Claims responses.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "VALIDATION_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Request cannot be processed: VALIDATION_ERROR",
+                        "request_id": "req-example-001",
+                        "details": [
+                          {
+                            "field": "body.reason",
+                            "issue": "Must not be blank."
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteClaimRequest"
+              },
+              "example": {
+                "expected_version": 4,
+                "receipt_confirmed": true
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Claim UUID. Missing and non-readable claims both return CLAIM_NOT_FOUND.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Identity validates token and account; resource authorization checked separately on server."
+      }
+    },
+    "schemas": {
+      "ClaimStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "APPROVED",
+          "REJECTED",
+          "RETURNED"
+        ]
+      },
+      "CreateClaimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "found_post_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evidence_description": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 5000,
+            "pattern": "\\S",
+            "description": "Trim before validating length. Private text; exclude from logs and notifications."
+          }
+        },
+        "required": [
+          "found_post_id",
+          "evidence_description"
+        ]
+      },
+      "ApproveClaimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "expected_version"
+        ]
+      },
+      "RejectClaimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "\\S",
+            "description": "Trim before validating length. Private text; exclude from logs and notifications."
+          }
+        },
+        "required": [
+          "expected_version",
+          "reason"
+        ]
+      },
+      "CompleteClaimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "receipt_confirmed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "expected_version",
+          "receipt_confirmed"
+        ]
+      },
+      "Evidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "private_content": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "private_content",
+          "created_at"
+        ]
+      },
+      "ReturnSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ARRANGED",
+              "HANDED_OVER",
+              "CONFIRMED"
+            ]
+          },
+          "handed_over_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "handed_over_at",
+          "confirmed_at"
+        ]
+      },
+      "ClaimSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "found_post_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claimant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rejection_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "returned_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "returned_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "return_summary": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReturnSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "found_post_id",
+          "claimant_id",
+          "status",
+          "version",
+          "created_at",
+          "updated_at",
+          "decided_by",
+          "decided_at",
+          "rejection_reason",
+          "returned_by",
+          "returned_at",
+          "return_summary"
+        ],
+        "description": "No evidence or file references. State-dependent metadata invariants: claims-contract.md section 3."
+      },
+      "ClaimDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "found_post_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claimant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rejection_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "returned_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "returned_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "return_summary": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReturnSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "found_post_id",
+          "claimant_id",
+          "status",
+          "version",
+          "created_at",
+          "updated_at",
+          "decided_by",
+          "decided_at",
+          "rejection_reason",
+          "returned_by",
+          "returned_at",
+          "return_summary",
+          "evidence"
+        ]
+      },
+      "ClaimPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ClaimSummary"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "has_next": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "has_next"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "UNAUTHENTICATED",
+                  "ACCOUNT_FORBIDDEN",
+                  "SELF_CLAIM_FORBIDDEN",
+                  "CLAIM_ACTION_FORBIDDEN",
+                  "CLAIM_NOT_FOUND",
+                  "POST_NOT_FOUND",
+                  "DUPLICATE_ACTIVE_CLAIM",
+                  "POST_ALREADY_ASSIGNED",
+                  "POST_NOT_CLAIMABLE",
+                  "POST_STATE_CONFLICT",
+                  "CLAIM_STATE_CONFLICT",
+                  "CLAIM_VERSION_CONFLICT",
+                  "RETURN_NOT_READY",
+                  "VALIDATION_ERROR",
+                  "POST_TYPE_NOT_FOUND",
+                  "EVIDENCE_REQUIRED"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "request_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "issue": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "issue"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "request_id",
+              "details"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    }
+  }
+}

@@ -38,6 +38,13 @@ Khi mount router, đăng ký đường dẫn tĩnh như `/posts/search`, `/users
 
 ## TV4 — Claims & Returns (7)
 
+**Cập nhật thiết kế 2026-11-14:** [Contract Claims và ma trận quyền](claims-contract.md)
+và [OpenAPI sáu endpoint `/api/v1/claims`](claims.openapi.json) là đặc tả đề xuất mới
+cho tạo/xem/approve/reject/complete. Bảng bảy API dưới đây được giữ làm lịch sử phân tích;
+`decision` được tách thành `approve`/`reject`, `complete` xác nhận nhận đồ qua Return.
+Upload bằng chứng, lập lịch và ghi nhận giao là phụ thuộc cần contract riêng, chưa được sáu API bao phủ.
+Các quyết định tích hợp và khác biệt RETURNED/CANCELLED/Return nằm trong contract mới.
+
 | Method | Endpoint | Mục đích |
 | --- | --- | --- |
 | POST | `/claims` | Tạo claim |
