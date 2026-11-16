@@ -1,43 +1,95 @@
 # Backend FindBack
 
-Backend dự kiến dùng FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Alembic và pytest. Đây là cấu trúc chuẩn bị phát triển; chưa có entrypoint, dependency manifest, migration hoặc API hoạt động.
+Đã triển khai ba API Claims bằng FastAPI, Pydantic, SQLAlchemy 2 và Alembic:
 
-## Cấu trúc một module
+| API | Kết quả | Quyền |
+| --- | --- | --- |
+| POST /api/v1/claims | 201 PENDING + Evidence | User hoạt động, FOUND của người khác |
+| GET /api/v1/claims/me | Danh sách có phân trang | claimant / reviewer / all của chính actor |
+| GET /api/v1/claims/{id} | Chi tiết và bằng chứng | Claimant hoặc chủ tin; người ngoài cùng 404 |
 
-```text
-app/modules/<module>/
-├── routers/         # HTTP endpoint, dependency và chuyển tiếp đến service
-├── schemas/         # Pydantic request/response; tách dữ liệu công khai/riêng tư
-├── services/        # Use case, quyền nghiệp vụ, state machine, transaction
-├── repositories/    # Truy vấn và ghi dữ liệu bằng session được truyền vào
-└── models/          # SQLAlchemy models thuộc module
+## Chạy local
+
+Python >= 3.11 và [uv](https://docs.astral.sh/uv/). Khởi động PostgreSQL theo
+[hướng dẫn Docker](../infra/docker/README.md), sau đó từ thư mục gốc:
+
+```powershell
+cd backend
+uv sync --locked
 ```
 
-| Module | Chủ trì | Dữ liệu phụ trách |
-| --- | --- | --- |
-| `identity` | TV1 | users |
-| `posts` | TV2 | posts, post_images |
-| `matching` | TV3 | categories, matches |
-| `claims_returns` | TV4 | claims, claim_evidence, returns |
-| `notifications_admin` | TV5 | notifications, reports; điều phối audit_logs |
+Tạo `backend/.env` (gitignored): đặt `DATABASE_URL` trỏ PostgreSQL local,
+`JWT_SECRET_KEY` ngẫu nhiên ít nhất 32 ký tự, `APP_ENV=development`.
+Tạo secret bằng `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Ứng dụng đọc `.env` gốc rồi `backend/.env`; biến môi trường tiến trình ưu tiên cao nhất.
+Placeholder CHANGE_ME bị từ chối. Không commit secret/token.
 
-`audit_logs` phục vụ mọi module; TV5 điều phối cấu trúc và nơi ghi log, từng service chịu trách nhiệm phát sinh sự kiện cho hành động của mình. Đây là quy ước tổ chức đề xuất, cần thống nhất khi thiết kế schema.
+```powershell
+uv run alembic upgrade head
+uv run python -m app.seed_demo
+uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+```
 
-## Thư mục dùng chung
+Mở [Swagger UI](http://127.0.0.1:8000/docs). OpenAPI thực tế: `/openapi.json`.
+Swagger UI 5.35.0 được phục vụ local, hỗ trợ OpenAPI 3.1, không phụ thuộc CDN.
 
-- `app/api/`: tập hợp router và dependency HTTP dùng chung.
-- `app/core/`: đọc cấu hình, JWT/RBAC, logging; không chứa nghiệp vụ riêng của một module.
-- `app/db/`: engine, session, metadata và cơ sở transaction.
-- `app/shared/`: exception và tiện ích có nhiều module sử dụng; tránh gom mọi logic vào đây.
-- `alembic/versions/`: migration có thứ tự; hiện chưa khởi tạo môi trường Alembic.
-- `tests/unit/<module>/`, `tests/integration/`, `tests/api/`: xem [kế hoạch kiểm thử](../docs/testing.md).
+Seed chỉ thêm User/Post giả lập, không tạo claim hoặc sửa bản ghi có sẵn.
+File `.local/claims-demo.json` chứa ID, request mẫu và JWT hạn một giờ của
+owner, claimant, outsider, admin. Chạy lại seed để lấy token mới.
+Trong Swagger: **Authorize** → dán riêng `users.claimant.token` (không thêm Bearer)
+→ POST với `create_body`. Đổi token owner để xem `relation=reviewer`.
+Outsider/admin xem detail sẽ nhận 404. Token không được lưu lâu dài trong trình duyệt.
 
-## Trước khi chạy được backend
+## Kiểm thử và bằng chứng
 
-1. Chốt phiên bản Python và khai báo dependency/lockfile.
-2. Thêm application factory hoặc entrypoint FastAPI và cấu hình môi trường.
-3. Khởi tạo session PostgreSQL, models, Alembic và migration đầu tiên.
-4. Mount routers, định nghĩa schemas và triển khai từng use case.
-5. Bổ sung fixture, test và lệnh chạy được kiểm chứng vào README này.
+```powershell
+uv run pytest -q --junitxml=.local/claims-sqlite-tests.xml
+uv run ruff check app tests alembic
+```
 
-Không phục vụ bằng chứng sở hữu bằng static/public route. Đường dẫn upload trong `.env.example` là đề xuất local, không phải cơ chế bảo vệ đã triển khai.
+Suite mặc định dùng SQLite tạm. Để kiểm chứng khóa và cạnh tranh trên PostgreSQL,
+đặt TEST_DATABASE_URL vào database kiểm thử, với quyền tạo schema:
+
+```powershell
+$env:TEST_DATABASE_URL = '<PostgreSQL test URL>'
+uv run pytest --postgres -q --junitxml=.local/claims-postgres-tests.xml
+```
+
+Mỗi test dùng schema ngẫu nhiên `claims_test_<uuid>` và chỉ xóa schema đó khi kết thúc.
+Không tự lấy URL production khi thiếu TEST_DATABASE_URL.
+Kiểm tra HTTP trên server local đang chạy, sau khi seed:
+
+```powershell
+uv run python -m app.check_claims
+```
+
+Lệnh này thêm một Post/Claim giả mới mỗi lần và ghi báo cáo không token/bằng chứng
+vào `.local/claims-live-checks.json`. Xem [báo cáo bàn giao](../docs/api/claims-implementation.md).
+
+## Tích hợp
+
+- Router → service → repository, cùng session cho xác thực, Posts và Claims.
+- JWT HS256 kiểm chữ ký, sub UUID, exp, iat, jti, issuer, audience, token_version;
+  đối chiếu User hiện có/hoạt động và bảng thu hồi jti. Tăng users.token_version
+  để thu hồi mọi token của User, hoặc thêm jti vào revoked_tokens.
+  Issuer mặc định findback, audience findback-api.
+- Identity/Posts hiện là adapter persistence tối thiểu có FK thực, chưa có API đăng
+  nhập/đăng tin. Không có route công khai cấp token; seed chỉ dùng ở development.
+- Theo contract, ID là UUID. PostgreSQL dùng schema mới findback_api, đổi qua
+  DATABASE_SCHEMA; không sửa public, claims_dev, claims_returns_demo hoặc tự nhập
+  outputs/findback.sql có ID BIGINT. Ghép schema BIGINT cần mapping/migration
+  và cập nhật contract riêng, không ép đổi ID ngầm.
+- Post adapter: OPEN nhận claim, CLOSED không nhận; tin ẩn/xóa mềm bị che 404.
+  Writer tương lai phải khóa Post → Claim → Return, cấm đổi owner khi có claim mở.
+  PostgreSQL dùng row lock và hai partial unique index.
+- Claim, Evidence, audit, outbox cùng commit. Chưa có worker gửi thông báo;
+  payload không chứa bằng chứng/lý do. Không lưu request body/token vào log.
+- Evidence chỉ có văn bản. Không có public/static route cho evidence, không trả
+  file_path. Summary/list không chứa evidence. Lỗi validation không lặp input.
+- Mọi response có Cache-Control: no-store. Claim không liên quan và không tồn tại
+  cùng 404 CLAIM_NOT_FOUND; admin không có quyền xem toàn bộ.
+- Ba PATCH approve/reject/complete vẫn là thiết kế cho đợt sau; Swagger chỉ công bố
+  ba API đã chạy. Bảng Returns chỉ phục vụ đọc metadata tương thích.
+
+Có thể phát triển với DATABASE_URL=sqlite:///./findback.db; kiểm chứng cạnh tranh
+phải dùng PostgreSQL. Server không tự tạo bảng; schema thay đổi qua Alembic.

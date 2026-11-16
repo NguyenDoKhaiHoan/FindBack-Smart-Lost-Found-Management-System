@@ -2,7 +2,7 @@
 
 FindBack là nền tảng quản lý tin mất đồ và nhặt được đồ, gợi ý các tin liên quan, hỗ trợ xác minh quyền sở hữu và ghi nhận quá trình trao trả.
 
-**Trạng thái:** khởi tạo cấu trúc dự án và tài liệu. Chưa có ứng dụng chạy được, API nghiệp vụ, database migration hay cấu hình triển khai hoàn chỉnh. Các thư mục trống được giữ trong Git bằng `.gitkeep`.
+**Trạng thái:** đã có [backend Claims chạy được](backend/README.md), ba API tạo/danh sách/chi tiết, JWT, repository và migration Alembic trong schema `findback_api`. [Báo cáo kiểm tra quyền](docs/api/claims-implementation.md). PostgreSQL local qua [Docker Compose](infra/docker/README.md); các module khác vẫn là bộ khung. Swagger: http://127.0.0.1:8000/docs sau khi chạy backend.
 
 Tài liệu nền tảng: [Phân tích hệ thống FindBack](https://docs.google.com/document/d/1F8Ngu5ViIxa2_9FLnt-T6s5GJ4o-B8GCtC_KmvlPFOg/edit?usp=sharing).
 
@@ -38,7 +38,7 @@ React UI → FastAPI routers → services → repositories → PostgreSQL
 | Môi trường | Docker Compose | Chạy các thành phần khi có cấu hình |
 | Quản lý công việc | GitHub Projects | Theo dõi phân công và tiến độ |
 
-Chưa chốt phiên bản công nghệ hoặc công cụ build frontend. Dependency, lockfile và lệnh chạy sẽ được thêm khi khởi tạo ứng dụng thực tế.
+Backend đã có dependency, lockfile và lệnh chạy tại [backend/README.md](backend/README.md). Công cụ build frontend chưa được khởi tạo.
 
 ## 3. Cấu trúc thư mục
 
@@ -88,7 +88,7 @@ FindBack/
 │   ├── database/README.md       # 11 bảng dự kiến, ràng buộc cần thiết kế
 │   ├── roadmap.md               # Lộ trình tương đối 21 ngày
 │   └── testing.md               # Kế hoạch kiểm thử và tiêu chí MVP
-├── infra/docker/                # Dockerfile, Compose trong giai đoạn sau
+├── infra/docker/                # PostgreSQL local qua Docker Compose
 ├── scripts/                     # Script setup, seed demo, tác vụ dự án
 ├── .editorconfig
 ├── .env.example                 # Mẫu biến môi trường, không chứa secret thật
@@ -131,11 +131,11 @@ git switch -c feat/identity-auth
 
 1. Đọc [kiến trúc](docs/architecture.md), [API](docs/api/endpoints.md) và [dữ liệu](docs/database/README.md).
 2. Chọn module theo phân công; thống nhất request/response, mã lỗi và schema trước khi triển khai.
-3. Khởi tạo dependency và entrypoint của backend/frontend; bổ sung hướng dẫn chạy tương ứng.
-4. Nếu dùng cấu hình local, sao chép `.env.example` thành `.env` và thay giá trị mẫu. Hiện chưa có chương trình đọc các biến này.
+3. Chạy backend theo [hướng dẫn](backend/README.md); các module còn lại tiếp tục phát triển trên cấu trúc hiện có.
+4. Nếu dùng cấu hình local, sao chép `.env.example` thành `.env` và thay giá trị mẫu. Docker Compose đọc `POSTGRES_*`; backend đọc `DATABASE_URL`, cấu hình JWT và các biến đã khai báo trong Settings. Có thể dùng `backend/.env` để cấu hình riêng.
 5. Bổ sung migration và kiểm thử cho nghiệp vụ được triển khai, rồi mở pull request.
 
-Hiện chưa thể chạy `uvicorn`, `npm run dev`, `pytest` hoặc `docker compose up` từ bộ khung này. Không có test chức năng nào được triển khai ở commit khởi tạo.
+Có thể chạy PostgreSQL theo [hướng dẫn Docker](infra/docker/README.md), rồi chạy API và pytest theo [backend/README.md](backend/README.md). Frontend vẫn chưa có ứng dụng chạy được.
 
 ## 7. Quy ước cộng tác
 

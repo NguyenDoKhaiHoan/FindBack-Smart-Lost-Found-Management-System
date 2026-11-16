@@ -1,5 +1,9 @@
 # Dữ liệu dự kiến
 
+Backend ba API Claims hiện có [migration Alembic riêng](../../backend/README.md)
+trong schema `findback_api`, dùng UUID và adapter User/Post tối thiểu có FK thực.
+Dữ liệu/schema SQL nháp được giữ riêng, chưa tự ghép vào backend.
+
 PostgreSQL, SQLAlchemy và Alembic được đề xuất trong phân tích. Đây là danh sách bảng/thuộc tính sơ bộ, chưa phải schema thực thi hay ERD đã chốt.
 
 | Bảng | Dữ liệu chính |

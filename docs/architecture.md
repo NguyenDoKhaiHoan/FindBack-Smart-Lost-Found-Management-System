@@ -43,4 +43,4 @@ Giao tiếp liên module qua service/interface rõ ràng. Không gọi router t�
 
 ## Trạng thái hiện tại
 
-Chỉ có cấu trúc thư mục và tài liệu. Chưa có server, cấu hình database, container, cơ chế lưu file hoặc kiểm soát quyền hoạt động. Xem [README gốc](../README.md) để bắt đầu phát triển.
+Đã có [backend ba API Claims](../backend/README.md) với JWT, repository, kiểm tra quyền và migration Alembic dùng UUID trong schema `findback_api`. Identity/Posts là adapter tối thiểu có FK thực; chưa có API đăng nhập/đăng tin. Dữ liệu/schema SQL nháp được giữ riêng, chưa tự nhập/ghép vào backend. Xem [báo cáo kiểm chứng](api/claims-implementation.md).

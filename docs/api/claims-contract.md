@@ -1,6 +1,8 @@
 # API contract Claims và xác minh sở hữu
 
-Đây là đầu ra thiết kế, chưa phải API đang chạy hoặc quyết định đã được các nhóm phê duyệt.
+Ba API tạo/danh sách/chi tiết đã được triển khai theo contract này; xem
+[bàn giao và kiểm thử](claims-implementation.md). Ba PATCH vẫn là thiết kế cho đợt sau.
+Tài liệu không thay thế việc thống nhất schema với các nhóm Identity/Posts.
 
 ## 1. Cơ sở và phạm vi
 

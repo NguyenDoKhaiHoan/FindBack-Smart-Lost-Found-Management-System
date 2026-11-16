@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "FindBack",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "findback",
+      "Username": "Hoan2308",
+      "SSLMode": "prefer"
+    }
+  }
+}
