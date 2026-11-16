@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.db.session import get_session
 from app.modules.claims_returns.schemas.claims import (
+    ApproveClaimRequest,
     ClaimDetail,
     ClaimPage,
     ClaimQuery,
     ClaimSummary,
+    CompleteClaimRequest,
     CreateClaimRequest,
     NoQuery,
+    RejectClaimRequest,
 )
 from app.modules.claims_returns.services.claims import ClaimService
 from app.modules.identity.models.user import User
@@ -68,3 +71,38 @@ def get_claim(
     query: Annotated[NoQuery, Query()],
 ):
     return ClaimService(session).detail(actor.id, id)
+
+
+@router.patch("/{id}/approve", response_model=ClaimSummary, summary="Chủ tin chấp nhận yêu cầu")
+def approve_claim(
+    id: UUID,
+    body: ApproveClaimRequest,
+    actor: Actor,
+    session: Database,
+    query: Annotated[NoQuery, Query()],
+):
+    return ClaimService(session).approve(actor.id, id, body)
+
+
+@router.patch("/{id}/reject", response_model=ClaimSummary, summary="Chủ tin từ chối yêu cầu")
+def reject_claim(
+    id: UUID,
+    body: RejectClaimRequest,
+    actor: Actor,
+    session: Database,
+    query: Annotated[NoQuery, Query()],
+):
+    return ClaimService(session).reject(actor.id, id, body)
+
+
+@router.patch(
+    "/{id}/complete", response_model=ClaimSummary, summary="Người nhận xác nhận đã nhận đồ"
+)
+def complete_claim(
+    id: UUID,
+    body: CompleteClaimRequest,
+    actor: Actor,
+    session: Database,
+    query: Annotated[NoQuery, Query()],
+):
+    return ClaimService(session).complete(actor.id, id, body)

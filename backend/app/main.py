@@ -28,7 +28,7 @@ def create_app(settings: Settings | None = None, *, engine=None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         description=(
-            "Tạo và xem yêu cầu nhận đồ. Authorize bằng JWT Bearer. "
+            "Tạo, xem, quyết định và xác nhận trao trả đồ. Authorize bằng JWT Bearer. "
             "Chỉ người gửi claim và chủ tin được xem bằng chứng. "
             "relation: claimant (đã gửi), reviewer (trên tin của tôi), all (cả hai)."
         ),

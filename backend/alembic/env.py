@@ -17,6 +17,12 @@ def run(connection):
         quoted = connection.dialect.identifier_preparer.quote(schema)
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {quoted}"))
         connection.commit()
+    is_sqlite = connection.dialect.name == "sqlite"
+    if is_sqlite:
+        # SQLite batch ALTER rebuilds tables. Disable FK enforcement outside the DDL
+        # transaction so existing claims can keep referencing posts during the rebuild.
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
     context.configure(
         connection=connection,
         target_metadata=Base.metadata,
@@ -24,8 +30,18 @@ def run(connection):
         include_schemas=True,
         compare_type=True,
     )
-    with context.begin_transaction():
-        context.run_migrations(schema=schema)
+    try:
+        with context.begin_transaction():
+            context.run_migrations(schema=schema)
+        if is_sqlite:
+            if connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migration left invalid foreign keys")
+            connection.commit()
+    finally:
+        if is_sqlite:
+            connection.rollback()
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
 
 
 if context.is_offline_mode():

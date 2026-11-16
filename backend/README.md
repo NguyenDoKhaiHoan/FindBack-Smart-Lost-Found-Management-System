@@ -1,12 +1,15 @@
 # Backend FindBack
 
-Đã triển khai ba API Claims bằng FastAPI, Pydantic, SQLAlchemy 2 và Alembic:
+Đã triển khai sáu API Claims bằng FastAPI, Pydantic, SQLAlchemy 2 và Alembic:
 
 | API | Kết quả | Quyền |
 | --- | --- | --- |
 | POST /api/v1/claims | 201 PENDING + Evidence | User hoạt động, FOUND của người khác |
 | GET /api/v1/claims/me | Danh sách có phân trang | claimant / reviewer / all của chính actor |
 | GET /api/v1/claims/{id} | Chi tiết và bằng chứng | Claimant hoặc chủ tin; người ngoài cùng 404 |
+| PATCH /api/v1/claims/{id}/approve | PENDING → APPROVED | Chủ tin, khác claimant |
+| PATCH /api/v1/claims/{id}/reject | PENDING → REJECTED | Chủ tin, khác claimant |
+| PATCH /api/v1/claims/{id}/complete | APPROVED → RETURNED | Claimant; Return đã HANDED_OVER |
 
 ## Chạy local
 
@@ -61,10 +64,14 @@ Kiểm tra HTTP trên server local đang chạy, sau khi seed:
 
 ```powershell
 uv run python -m app.check_claims
+uv run python -m app.check_claim_decisions
 ```
 
 Lệnh này thêm một Post/Claim giả mới mỗi lần và ghi báo cáo không token/bằng chứng
-vào `.local/claims-live-checks.json`. Xem [báo cáo bàn giao](../docs/api/claims-implementation.md).
+vào `.local/claims-live-checks.json` và `.local/claims-decisions-live-checks.json`.
+Kiểm tra decisions dùng fixture Return HANDED_OVER giả lập trong development;
+API complete không tự tạo bước này. Xem [tạo/xem](../docs/api/claims-implementation.md)
+và [quyết định/trao trả](../docs/api/claims-decisions-implementation.md).
 
 ## Tích hợp
 
@@ -88,8 +95,13 @@ vào `.local/claims-live-checks.json`. Xem [báo cáo bàn giao](../docs/api/cla
   file_path. Summary/list không chứa evidence. Lỗi validation không lặp input.
 - Mọi response có Cache-Control: no-store. Claim không liên quan và không tồn tại
   cùng 404 CLAIM_NOT_FOUND; admin không có quyền xem toàn bộ.
-- Ba PATCH approve/reject/complete vẫn là thiết kế cho đợt sau; Swagger chỉ công bố
-  ba API đã chạy. Bảng Returns chỉ phục vụ đọc metadata tương thích.
+- PATCH nhận expected_version là integer >= 1; reject cần reason không rỗng;
+  complete cần receipt_confirmed=true. Chỉ claimant xác nhận sau HANDED_OVER.
+  Return CONFIRMED, Claim RETURNED, Post CLOSED, audit và outbox cùng commit.
+  PATCH lặp trả 409 và không thêm audit/event; hai request cạnh tranh chỉ một thành công.
+- Migration 0002 thêm confirmed_by và marker hoàn tất trên Post. Chưa có endpoint
+  lập lịch/ghi HANDED_OVER, upload evidence hoặc worker vận chuyển thông báo.
+  [Schema và bàn giao Notifications](../docs/api/claim-notification-events.md).
 
 Có thể phát triển với DATABASE_URL=sqlite:///./findback.db; kiểm chứng cạnh tranh
 phải dùng PostgreSQL. Server không tự tạo bảng; schema thay đổi qua Alembic.

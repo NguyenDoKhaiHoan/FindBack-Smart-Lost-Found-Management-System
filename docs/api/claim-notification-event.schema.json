@@ -1,0 +1,58 @@
+{
+  "additionalProperties": false,
+  "description": "Private-data-free contract consumed by Notifications after the outbox commit.",
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "claim.created",
+        "claim.approved",
+        "claim.rejected",
+        "claim.completed"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "claim_id": {
+      "format": "uuid",
+      "title": "Claim Id",
+      "type": "string"
+    },
+    "found_post_id": {
+      "format": "uuid",
+      "title": "Found Post Id",
+      "type": "string"
+    },
+    "recipient_id": {
+      "format": "uuid",
+      "title": "Recipient Id",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "type",
+    "claim_id",
+    "found_post_id",
+    "recipient_id",
+    "version",
+    "occurred_at"
+  ],
+  "title": "ClaimNotificationEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

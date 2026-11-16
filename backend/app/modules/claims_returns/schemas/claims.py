@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
 class Schema(BaseModel):
@@ -41,6 +41,25 @@ class ClaimQuery(Schema):
     status: ClaimStatus | None = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
+
+
+class ApproveClaimRequest(Schema):
+    expected_version: int = Field(ge=1, strict=True)
+
+
+class RejectClaimRequest(ApproveClaimRequest):
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class CompleteClaimRequest(ApproveClaimRequest):
+    receipt_confirmed: Literal[True]
+
+    @field_validator("receipt_confirmed", mode="before")
+    @classmethod
+    def require_explicit_confirmation(cls, value):
+        if value is not True:
+            raise ValueError("Receipt confirmation must be true")
+        return value
 
 
 class NoQuery(Schema):

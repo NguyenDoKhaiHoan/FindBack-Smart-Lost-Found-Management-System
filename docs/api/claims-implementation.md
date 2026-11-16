@@ -1,5 +1,9 @@
 # Bàn giao API tạo và xem Claims
 
+Báo cáo đợt đầu cho ba API đọc/tạo. Ba API PATCH đã được triển khai trong
+[đợt quyết định/trao trả](claims-decisions-implementation.md); xem báo cáo mới về
+transaction, migration 0002, audit và sự kiện Notifications.
+
 Đã triển khai ba operation của [contract](claims-contract.md):
 `POST /api/v1/claims`, `GET /api/v1/claims/me`, `GET /api/v1/claims/{id}`.
 Entrypoint: `backend/app/main.py:create_app`; xem [hướng dẫn chạy](../../backend/README.md).
@@ -56,8 +60,8 @@ Assertion schema dựa trên `docs/api/claims.openapi.json` có sẵn, độc l�
 Schema `findback_api` mới dùng UUID với FK User/Post thực. Identity/Posts là adapter
 tối thiểu phục vụ Claims, chưa phải module đăng nhập/đăng tin hoàn chỉnh.
 Không tự nhập hoặc thay đổi SQL nháp/dữ liệu có sẵn; schema BIGINT trong
-`outputs/findback.sql` chưa nối vào API UUID. Không triển khai ba PATCH,
-upload/download evidence hoặc worker thông báo trong đợt này.
+`outputs/findback.sql` chưa nối vào API UUID. Upload/download evidence và worker
+thông báo vẫn ngoài phạm vi; ba PATCH được bàn giao ở báo cáo đợt tiếp theo nêu trên.
 
 Nguồn kỹ thuật đã đối chiếu: [FastAPI JWT](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
 và [SQLAlchemy PostgreSQL partial indexes](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#partial-indexes).

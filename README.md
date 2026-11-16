@@ -2,7 +2,7 @@
 
 FindBack là nền tảng quản lý tin mất đồ và nhặt được đồ, gợi ý các tin liên quan, hỗ trợ xác minh quyền sở hữu và ghi nhận quá trình trao trả.
 
-**Trạng thái:** đã có [backend Claims chạy được](backend/README.md), ba API tạo/danh sách/chi tiết, JWT, repository và migration Alembic trong schema `findback_api`. [Báo cáo kiểm tra quyền](docs/api/claims-implementation.md). PostgreSQL local qua [Docker Compose](infra/docker/README.md); các module khác vẫn là bộ khung. Swagger: http://127.0.0.1:8000/docs sau khi chạy backend.
+**Trạng thái:** đã có [backend sáu API Claims](backend/README.md): tạo/danh sách/chi tiết, approve/reject/complete; JWT, repository, migration Alembic và audit/outbox trong schema `findback_api`. Xem [kiểm tra quyền](docs/api/claims-implementation.md) và [transaction, quyết định/trao trả, sự kiện Notifications](docs/api/claims-decisions-implementation.md). PostgreSQL local qua [Docker Compose](infra/docker/README.md); các module khác vẫn là bộ khung. Swagger: http://127.0.0.1:8000/docs sau khi chạy backend.
 
 Tài liệu nền tảng: [Phân tích hệ thống FindBack](https://docs.google.com/document/d/1F8Ngu5ViIxa2_9FLnt-T6s5GJ4o-B8GCtC_KmvlPFOg/edit?usp=sharing).
 

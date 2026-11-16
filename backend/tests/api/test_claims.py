@@ -440,7 +440,7 @@ def test_swagger_and_runtime_openapi_expose_only_implemented_claim_operations(wo
     assert "/swagger-assets/swagger-ui-bundle.js" in response.text
     assert world.client.get("/swagger-assets/swagger-ui-bundle.js").status_code == 200
     spec = world.client.get("/openapi.json").json()
-    assert set(spec["paths"]) == {"/api/v1/claims", "/api/v1/claims/me", "/api/v1/claims/{id}"}
+    assert set(spec["paths"]) == set(CONTRACT["paths"])
     for path, operations in spec["paths"].items():
         for operation in operations.values():
             assert operation["security"] == [{"BearerAuth": []}]

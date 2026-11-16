@@ -1,8 +1,10 @@
 # Dữ liệu dự kiến
 
-Backend ba API Claims hiện có [migration Alembic riêng](../../backend/README.md)
+Backend sáu API Claims hiện có [migration Alembic riêng](../../backend/README.md)
 trong schema `findback_api`, dùng UUID và adapter User/Post tối thiểu có FK thực.
-Dữ liệu/schema SQL nháp được giữ riêng, chưa tự ghép vào backend.
+Các bản nháp bên dưới và `outputs/findback.sql` được giữ riêng, chưa tự ghép vào backend.
+Migration 0002 thêm actor xác nhận Return và marker Claim đã hoàn tất trên Post;
+xem [bàn giao quyết định/trao trả](../api/claims-decisions-implementation.md).
 
 PostgreSQL, SQLAlchemy và Alembic được đề xuất trong phân tích. Đây là danh sách bảng/thuộc tính sơ bộ, chưa phải schema thực thi hay ERD đã chốt.
 

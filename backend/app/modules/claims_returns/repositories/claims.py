@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.claims_returns.models.claim import Claim, ClaimEvidence
@@ -26,18 +26,56 @@ class ClaimRepository:
             is not None
         )
 
-    def has_winner(self, post_id: UUID) -> bool:
+    def has_winner(self, post_id: UUID, *, exclude_claim_id: UUID | None = None) -> bool:
         return (
             self.session.scalar(
                 select(Claim.id)
                 .where(
                     Claim.found_post_id == post_id,
                     Claim.status.in_(("APPROVED", "RETURNED")),
+                    or_(exclude_claim_id is None, Claim.id != exclude_claim_id),
                 )
                 .limit(1)
             )
             is not None
         )
+
+    def related_post_id(self, claim_id: UUID, actor_id: UUID) -> UUID | None:
+        # Discover only the parent ID; do not lock Claim before Post or load evidence.
+        return self.session.scalar(
+            select(Claim.found_post_id)
+            .join(Post, Post.id == Claim.found_post_id)
+            .where(Claim.id == claim_id, self.related(actor_id))
+        )
+
+    def get_for_update(self, claim_id: UUID) -> Claim | None:
+        return self.session.scalar(
+            select(Claim)
+            .where(Claim.id == claim_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
+    def transition(
+        self, claim: Claim, expected_status: str, expected_version: int, **values
+    ) -> bool:
+        result = self.session.execute(
+            update(Claim)
+            .where(
+                Claim.id == claim.id,
+                Claim.status == expected_status,
+                Claim.version == expected_version,
+            )
+            .values(**values, version=expected_version + 1)
+            .execution_options(synchronize_session=False)
+        )
+        return result.rowcount == 1
+
+    def has_valid_evidence(self, claim_id: UUID) -> bool:
+        contents = self.session.scalars(
+            select(ClaimEvidence.private_content).where(ClaimEvidence.claim_id == claim_id)
+        )
+        return any(content and content.strip() for content in contents)
 
     @staticmethod
     def related(actor_id: UUID):

@@ -18,3 +18,11 @@ class PostRepository:
             .with_for_update()
             .execution_options(populate_existing=True)
         )
+
+    def get_for_update(self, post_id: UUID) -> Post | None:
+        return self.session.scalar(
+            select(Post)
+            .where(Post.id == post_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )

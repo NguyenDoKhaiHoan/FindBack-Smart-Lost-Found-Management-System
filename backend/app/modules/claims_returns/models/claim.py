@@ -84,6 +84,10 @@ class ReturnRecord(Base):
         CheckConstraint(
             "status IN ('ARRANGED','HANDED_OVER','CONFIRMED')", name="ck_return_status"
         ),
+        CheckConstraint(
+            "confirmed_by IS NULL OR (status = 'CONFIRMED' AND confirmed_at IS NOT NULL)",
+            name="ck_return_confirmation_actor",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -91,6 +95,7 @@ class ReturnRecord(Base):
     status: Mapped[str] = mapped_column(String(12))
     handed_over_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    confirmed_by: Mapped[UUID | None] = mapped_column(ForeignKey("findback_api.users.id"))
 
 
 class AuditLog(Base):
