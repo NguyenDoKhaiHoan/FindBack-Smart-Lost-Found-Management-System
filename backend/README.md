@@ -42,39 +42,61 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+## Cấu hình database và JWT
+
 Đặt `DATABASE_URL` trỏ đến database PostgreSQL đã tạo (không commit thông tin đăng nhập):
 
 ```powershell
 $env:DATABASE_URL = "postgresql+psycopg://<user>:<password>@localhost:5432/findback"
 ```
 
-Áp dụng migration hiện tại:
+Tạo secret JWT riêng cho môi trường development trước khi gọi API:
 
 ```powershell
-alembic upgrade head
+$env:JWT_SECRET_KEY = python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Từ thư mục `backend`, áp dụng migrations (nếu đang ở repository root, chuyển vào `backend` trước):
+
+```powershell
+# Chỉ cần nếu shell hiện đang ở repository root
+Set-Location backend
+python -m alembic upgrade head
 ```
 
 Khi cập nhật model ở các lần sau, tạo migration rồi kiểm tra nội dung trước khi áp dụng:
 
 ```powershell
-alembic revision --autogenerate -m "describe schema change"
-alembic upgrade head
+python -m alembic revision --autogenerate -m "describe schema change"
+python -m alembic upgrade head
 ```
 
 Quay lui một revision trong môi trường phù hợp:
 
 ```powershell
-alembic downgrade -1
+python -m alembic downgrade -1
 ```
 
-`DATABASE_URL` ưu tiên hơn URL placeholder trong `alembic.ini`. Quan hệ `User.posts`, `User.claims` và `User.notifications` dùng tên model dự kiến; mỗi module liên quan cần bổ sung model, khóa ngoại trỏ đến `users.id` và relationship đối ứng trước khi khởi tạo mapper hoặc truy vấn các quan hệ đó. `password_hash` chỉ lưu giá trị hash; tầng đăng ký/xác thực phải hash mật khẩu trước khi ghi và không lưu mật khẩu dạng rõ.
+## Chạy FastAPI
+
+Sau khi cấu hình database/JWT và migrate, chạy từ thư mục gốc repository (nếu shell vẫn ở `backend`, chuyển về root trước):
+
+```powershell
+# Chỉ cần nếu shell hiện đang ở backend
+Set-Location ..
+python -m uvicorn app.main:app --reload --app-dir backend
+```
+
+Mở `http://127.0.0.1:8000/docs` để xem OpenAPI UI. Các endpoint Identity gồm `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/users/me` và `PATCH /api/v1/users/me`. Đăng nhập trả bearer token; dùng nút **Authorize** trong `/docs` để thử hai endpoint `/users/me`.
+
+`DATABASE_URL` ưu tiên hơn URL placeholder trong `alembic.ini`. Các quan hệ đến posts, claims và notifications chưa được ánh xạ cho đến khi model tương ứng được triển khai. `password_hash` chỉ lưu Argon2 hash; không ghi mật khẩu dạng rõ.
 
 ## Các bước tiếp theo
 
 1. Chốt phiên bản Python và khai báo dependency/lockfile.
-2. Thêm application factory hoặc entrypoint FastAPI và cấu hình môi trường.
+2. Hoàn thiện cấu hình FastAPI và mount routers của các module còn lại.
 3. Khởi tạo session PostgreSQL và bổ sung migrations cho các module còn lại.
-4. Mount routers, định nghĩa schemas và triển khai từng use case.
+4. Định nghĩa schemas và triển khai từng use case.
 5. Bổ sung fixture, test và lệnh chạy được kiểm chứng vào README này.
 
 Không phục vụ bằng chứng sở hữu bằng static/public route. Đường dẫn upload trong `.env.example` là đề xuất local, không phải cơ chế bảo vệ đã triển khai.

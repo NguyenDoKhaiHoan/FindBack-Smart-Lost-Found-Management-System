@@ -2,17 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum as SqlEnum, Integer, String, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-
-if TYPE_CHECKING:
-    from app.modules.claims_returns.models.claim import Claim
-    from app.modules.notifications_admin.models.notification import Notification
-    from app.modules.posts.models.post import Post
 
 
 class UserRole(str, Enum):
@@ -27,6 +21,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
     )
+    full_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         SqlEnum(
@@ -43,7 +40,3 @@ class User(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),
     )
-
-    posts: Mapped[list[Post]] = relationship("Post")
-    claims: Mapped[list[Claim]] = relationship("Claim")
-    notifications: Mapped[list[Notification]] = relationship("Notification")
