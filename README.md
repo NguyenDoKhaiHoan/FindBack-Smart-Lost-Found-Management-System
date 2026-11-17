@@ -2,7 +2,7 @@
 
 FindBack là nền tảng quản lý tin mất đồ và nhặt được đồ, gợi ý các tin liên quan, hỗ trợ xác minh quyền sở hữu và ghi nhận quá trình trao trả.
 
-**Trạng thái:** khởi tạo cấu trúc dự án và tài liệu. Chưa có ứng dụng chạy được, API nghiệp vụ, database migration hay cấu hình triển khai hoàn chỉnh. Các thư mục trống được giữ trong Git bằng `.gitkeep`.
+**Trạng thái:** đã có thuật toán matching theo quy tắc, `GET /api/v1/matches` và test unit/API chạy độc lập với adapter bộ nhớ/demo. Chưa tích hợp Posts, PostgreSQL/migration, các API còn lại hoặc triển khai toàn hệ thống. Hướng dẫn chạy tại [backend/README.md](backend/README.md). Các thư mục chưa triển khai được giữ trong Git bằng `.gitkeep`.
 
 Tài liệu nền tảng: [Phân tích hệ thống FindBack](https://docs.google.com/document/d/1F8Ngu5ViIxa2_9FLnt-T6s5GJ4o-B8GCtC_KmvlPFOg/edit?usp=sharing).
 
@@ -135,7 +135,7 @@ git switch -c feat/identity-auth
 4. Nếu dùng cấu hình local, sao chép `.env.example` thành `.env` và thay giá trị mẫu. Hiện chưa có chương trình đọc các biến này.
 5. Bổ sung migration và kiểm thử cho nghiệp vụ được triển khai, rồi mở pull request.
 
-Hiện chưa thể chạy `uvicorn`, `npm run dev`, `pytest` hoặc `docker compose up` từ bộ khung này. Không có test chức năng nào được triển khai ở commit khởi tạo.
+Matching có thể chạy bằng `uvicorn` và kiểm thử bằng `pytest` theo README backend. Frontend và Docker Compose vẫn chưa có cấu hình chạy. Xem [bàn giao matching](docs/matching-implementation.md) để biết phạm vi và dependency còn lại.
 
 ## 7. Quy ước cộng tác
 

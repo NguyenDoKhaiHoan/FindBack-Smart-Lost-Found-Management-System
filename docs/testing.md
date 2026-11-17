@@ -1,6 +1,6 @@
 # Kế hoạch kiểm thử
 
-Chưa có test hoặc ứng dụng chạy được. Tài liệu này hướng dẫn kiểm thử khi từng module được triển khai; không phải kết quả test đã đạt.
+Đã có test unit/API cho thuật toán matching và `GET /api/v1/matches`, chạy bằng adapter bộ nhớ. Từ `backend`, chạy `.venv/Scripts/python -m pytest -q` sau khi cài `requirements-dev.txt`. Các module khác và PostgreSQL chưa có kiểm thử triển khai. Chi tiết phạm vi tại [bàn giao matching](matching-implementation.md).
 
 ## Vị trí
 

@@ -29,12 +29,14 @@ Danh sách bám theo tài liệu phân tích, chưa phải OpenAPI contract ho�
 | Method | Endpoint | Mục đích |
 | --- | --- | --- |
 | GET | `/categories` | Danh mục |
-| GET | `/posts/search` | Tìm nâng cao |
-| GET | `/posts/{id}/matches` | Gợi ý phù hợp |
+| GET | `/api/v1/search` | Tìm nâng cao; thay đường dẫn sơ bộ `/posts/search` |
+| GET | `/api/v1/matches` | Gợi ý theo query `post_id`; thay `/posts/{id}/matches` |
 | POST | `/matches/recalculate` | Tính lại điểm |
 | GET | `/matches/{id}` | Chi tiết gợi ý |
 
-Khi mount router, đăng ký đường dẫn tĩnh như `/posts/search`, `/users/me` trước đường dẫn tham số tương ứng để tránh xung đột.
+Contract hai GET Search/Matches và schema bộ lọc: [search-matching-contract.md](search-matching-contract.md). Hai API này đã có prefix/version theo yêu cầu bổ sung; các đường dẫn còn lại vẫn là danh mục sơ bộ chưa chốt prefix. Không triển khai alias cũ mặc định.
+
+Khi mount router, đăng ký đường dẫn tĩnh như `/users/me` trước đường dẫn tham số tương ứng để tránh xung đột.
 
 ## TV4 — Claims & Returns (7)
 

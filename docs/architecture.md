@@ -43,4 +43,4 @@ Giao tiếp liên module qua service/interface rõ ràng. Không gọi router t�
 
 ## Trạng thái hiện tại
 
-Chỉ có cấu trúc thư mục và tài liệu. Chưa có server, cấu hình database, container, cơ chế lưu file hoặc kiểm soát quyền hoạt động. Xem [README gốc](../README.md) để bắt đầu phát triển.
+Đã có server FastAPI cho `GET /api/v1/matches`, thuật toán quy tắc và adapter snapshot bộ nhớ dùng demo/test. Các endpoint này chỉ phục vụ DTO công khai. Chưa có adapter Posts/DB thật, container, lưu file hoặc xác thực/phân quyền cho các luồng riêng tư. Xem [bàn giao matching](matching-implementation.md) và [README gốc](../README.md).
