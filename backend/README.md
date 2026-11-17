@@ -21,7 +21,9 @@ backend/
 │   ├── shared/                   # Custom HTTP Exceptions (NotFoundError, ForbiddenError, etc.)
 │   └── modules/
 │       ├── identity/             # Shared User persistence model & Auth (TV1)
-│       ├── posts/                # Posts & Images management (TV2)
+│       ├── posts/                # Posts, Categories & Images persistence models (TV2)
+│       │   ├── models/           # Category, Post, PostImage SQLAlchemy models
+│       │   └── repositories/     # PostRepository (query, search, row-level locking)
 │       ├── matching/             # Categories & Matching engine (TV3)
 │       ├── claims_returns/       # Claims & Returns workflow (TV4)
 │       └── notifications_admin/  # Notifications & Admin moderation (TV5 - KAN-31)
@@ -153,6 +155,8 @@ python -m pytest -v
 Kiểm tra chi tiết từng file:
 
 ```bash
+python -m pytest tests/api/test_admin_posts.py -v
+python -m pytest tests/api/test_posts_schema.py -v
 python -m pytest tests/api/test_notifications.py -v
 python -m pytest tests/unit/notifications_admin/test_notification_service.py -v
 ```
@@ -184,3 +188,30 @@ Tuân thủ đặc tả tại `docs/api/NOTIFICATION_EVENT_CONTRACT.md`:
 - Các module khác (`claims_returns`, `posts`) phát thông báo thông qua phương thức `NotificationService.create_notification(session, data, auto_commit=True)`.
 - **Deduplication / Concurrency Idempotency (CONC-01)**: Áp dụng câu lệnh PostgreSQL `INSERT ... ON CONFLICT (event_id) DO NOTHING`, bảo đảm xử lý an toàn đồng thời, không sinh lỗi unhandled `IntegrityError` hay HTTP 500 khi nhiều request đồng thời cùng phát một `event_id`. Hỗ trợ tham gia vào transaction của caller mà không phá vỡ transaction.
 - **Deep Allowlist Sanitization (PRIV-01)**: Áp dụng cơ chế Whitelist (Allowlist) kết hợp duyệt đệ quy đa tầng, loại bỏ triệt để token, mật khẩu, api key hoặc bằng chứng riêng tư ở bất kỳ cấp độ nào của cấu trúc metadata.
+
+---
+
+## 7. Chi tiết triển khai Module Admin Post Moderation (KAN-32)
+
+### 7.1. API Endpoints
+
+Tuân thủ nghiêm ngặt đặc tả tại `docs/api/API_CONTRACT_NOTIFICATIONS_ADMIN.md`:
+
+| Phương thức | Endpoint | Mô tả | Quyền truy cập |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/admin/posts` | Danh sách bài đăng phân trang, hỗ trợ lọc `status`, `type` và tìm kiếm `q` | Quản trị viên (`ADMIN`) |
+| `PATCH` | `/api/v1/admin/posts/{id}/moderation` | Kiểm duyệt bài đăng (hành động `HIDE`, kèm lý do bắt buộc) | Quản trị viên (`ADMIN`) |
+
+### 7.2. Quy tắc nghiệp vụ & Tính nguyên tử (Transaction Atomicity)
+
+- **Quyền hạn**: Sử dụng dependency `get_current_admin_user`, từ chối người dùng thông thường (`USER`) với HTTP `403 Forbidden`.
+- **Ràng buộc trạng thái bài đăng**:
+  - Không cho phép kiểm duyệt bài đăng đã đóng (`CLOSED`), trả về HTTP `400 Bad Request`.
+  - Hỗ trợ hành động `HIDE`, chuyển trạng thái bài đăng sang `HIDDEN`.
+  - Ghi nhận `moderated_by` (UUID của Admin), `moderated_at` (thời điểm UTC), và `moderation_reason` (lý do không rỗng).
+- **Ghi nhận Audit Log**:
+  - Mỗi hành động kiểm duyệt được lưu trữ trong bảng `audit_logs` gồm `actor_id`, `action="HIDE"`, `target_type="POST"`, `target_id`, `reason`, `old_status`, `new_status`.
+- **Thông báo cho chủ bài đăng (`POST_HIDDEN`)**:
+  - Gọi `NotificationService.create_notification(auto_commit=False)` gửi thông báo cho tác giả bài đăng (`post.user_id`).
+  - Sử dụng `event_id` tất định (`uuid.uuid5`) để chống trùng lặp thông báo nếu kiểm duyệt lặp lại.
+- **Tính nguyên tử**: Thao tác cập nhật bài đăng, ghi audit log và tạo thông báo nằm chung trong một database transaction. Nếu có bất kỳ bước nào thất bại, toàn bộ transaction được rollback đồng thời.

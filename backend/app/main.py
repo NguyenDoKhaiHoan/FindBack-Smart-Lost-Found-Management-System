@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.db.session import engine
 from app.modules.notifications_admin.routers.notifications import router as notifications_router
+from app.modules.notifications_admin.routers.admin_posts import router as admin_posts_router
 
 
 @asynccontextmanager
@@ -70,5 +71,9 @@ async def health_check() -> dict[str, str]:
 # Mount API routers
 app.include_router(
     notifications_router,
+    prefix=settings.API_V1_PREFIX,
+)
+app.include_router(
+    admin_posts_router,
     prefix=settings.API_V1_PREFIX,
 )

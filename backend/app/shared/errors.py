@@ -27,6 +27,11 @@ class ConflictError(AppError):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
+class BadRequestError(AppError):
+    def __init__(self, detail: str = "Yêu cầu không hợp lệ"):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
 class ValidationError(AppError):
     def __init__(self, detail: str = "Dữ liệu không hợp lệ"):
         super().__init__(status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422), detail=detail)

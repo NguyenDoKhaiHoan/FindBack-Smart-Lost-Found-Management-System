@@ -69,7 +69,11 @@ async def prepare_and_clean_database():
     yield
     # Cleanup after each test: Truncate test tables
     async with test_engine.begin() as conn:
+        await conn.execute(text("TRUNCATE TABLE audit_logs CASCADE;"))
         await conn.execute(text("TRUNCATE TABLE notifications CASCADE;"))
+        await conn.execute(text("TRUNCATE TABLE post_images CASCADE;"))
+        await conn.execute(text("TRUNCATE TABLE posts CASCADE;"))
+        await conn.execute(text("TRUNCATE TABLE categories CASCADE;"))
         await conn.execute(text("TRUNCATE TABLE users CASCADE;"))
 
 
