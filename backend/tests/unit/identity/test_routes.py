@@ -1,10 +1,13 @@
 import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
-from sqlalchemy import create_engine, delete
+import jwt
+from passlib.context import CryptContext
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -14,7 +17,16 @@ from app.modules.identity.models.user import User
 from app.modules.identity.routers.auth import login, register
 from app.modules.identity.routers.dependencies import get_current_user
 from app.modules.identity.routers.users import read_current_user, update_current_user
-from app.modules.identity.schemas import LoginRequest, RegisterRequest, UserUpdate
+from app.modules.identity.schemas import (
+    LoginRequest,
+    RegisterRequest,
+    UserRead,
+    UserUpdate,
+)
+from app.modules.identity.security import get_user_id_from_token
+from app.modules.identity.services.auth_service import authenticate_user
+
+legacy_password_context = CryptContext(schemes=["argon2"])
 
 
 class IdentityRouteTests(unittest.TestCase):
@@ -46,9 +58,14 @@ class IdentityRouteTests(unittest.TestCase):
             full_name="Morgan Lee",
         )
         user = register(payload, self.db)
+        stored_user = self.db.scalar(
+            select(User).where(User.email == "person@example.com")
+        )
 
         self.assertEqual(user.full_name, "Morgan Lee")
-        self.assertNotEqual(user.password_hash, payload.password)
+        self.assertNotIn("password_hash", UserRead.model_fields)
+        assert stored_user is not None
+        self.assertNotEqual(stored_user.password_hash, payload.password)
         with self.assertRaises(HTTPException) as raised:
             register(payload, self.db)
         self.assertEqual(raised.exception.status_code, 409)
@@ -101,6 +118,49 @@ class IdentityRouteTests(unittest.TestCase):
                 self.db,
             )
         self.assertEqual(raised.exception.status_code, 401)
+
+    def test_legacy_argon2_hash_is_upgraded_after_successful_login(self) -> None:
+        user = User(
+            email="legacy@example.com",
+            full_name="Legacy User",
+            password_hash=legacy_password_context.hash("StrongPass1!"),
+        )
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": "test-secret-" * 4}):
+            token = authenticate_user(
+                self.db,
+                LoginRequest(
+                    email="legacy@example.com",
+                    password="StrongPass1!",
+                ),
+            )
+
+        self.assertEqual(token.token_type, "bearer")
+        self.assertTrue(user.password_hash.startswith("$2b$"))
+
+    def test_missing_invalid_and_expired_tokens_are_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as missing:
+            get_current_user(None, self.db)
+        self.assertEqual(missing.exception.status_code, 401)
+
+        secret = "test-secret-" * 4
+        expired_token = jwt.encode(
+            {
+                "sub": "1",
+                "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+            },
+            secret,
+            algorithm="HS256",
+        )
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": secret}):
+            for token in ("not-a-jwt", expired_token):
+                with self.subTest(token=token):
+                    with self.assertRaises(HTTPException) as raised:
+                        get_user_id_from_token(token)
+                    self.assertEqual(raised.exception.status_code, 401)
 
     def test_identity_routes_are_in_openapi(self) -> None:
         paths = app.openapi()["paths"]

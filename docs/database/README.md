@@ -1,10 +1,10 @@
 # Dữ liệu dự kiến
 
-PostgreSQL, SQLAlchemy và Alembic được đề xuất trong phân tích. Đây là danh sách bảng/thuộc tính sơ bộ, chưa phải schema thực thi hay ERD đã chốt.
+PostgreSQL, SQLAlchemy và Alembic được dùng cho backend. Bảng `users` đã được triển khai với migration ban đầu; các bảng còn lại dưới đây vẫn là danh sách sơ bộ, chưa phải schema thực thi hay ERD đã chốt.
 
 | Bảng | Dữ liệu chính |
 | --- | --- |
-| `users` | id, email, password_hash, role, status |
+| `users` | id, email, password_hash, role, created_at |
 | `posts` | id, user_id, type, category_id, title, description, location, event_time, status |
 | `post_images` | id, post_id, file_path |
 | `categories` | id, name |
@@ -35,4 +35,4 @@ PostgreSQL, SQLAlchemy và Alembic được đề xuất trong phân tích. Đâ
 - Tạo return chỉ khi claim hợp lệ; chốt số phiên trao trả và điều kiện xác nhận để tránh bàn giao nhiều lần.
 - Chốt metadata của file, chính sách truy cập bằng chứng, lưu trữ lịch sử và vòng đời dữ liệu.
 
-Không tạo migration từ bảng sơ bộ này trước khi thống nhất các quy tắc tại [requirements.md](../requirements.md). Migration tương lai đặt ở `backend/alembic/versions/`; dữ liệu seed chỉ dùng dữ liệu demo giả.
+Không tạo migration cho các bảng còn lại từ danh sách sơ bộ này trước khi thống nhất các quy tắc tại [requirements.md](../requirements.md). Migration `users` nằm ở `backend/alembic/versions/`; migration tiếp theo đặt cùng thư mục và dữ liệu seed chỉ dùng dữ liệu demo giả.

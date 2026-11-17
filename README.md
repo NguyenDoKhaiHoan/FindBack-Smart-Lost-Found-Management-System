@@ -2,7 +2,7 @@
 
 FindBack là nền tảng quản lý tin mất đồ và nhặt được đồ, gợi ý các tin liên quan, hỗ trợ xác minh quyền sở hữu và ghi nhận quá trình trao trả.
 
-**Trạng thái:** khởi tạo cấu trúc dự án và tài liệu. Chưa có ứng dụng chạy được, API nghiệp vụ, database migration hay cấu hình triển khai hoàn chỉnh. Các thư mục trống được giữ trong Git bằng `.gitkeep`.
+**Trạng thái:** khởi tạo cấu trúc dự án và tài liệu. Backend đã có model `users` và migration Alembic ban đầu; chưa có ứng dụng API nghiệp vụ hay cấu hình triển khai hoàn chỉnh. Các thư mục trống được giữ trong Git bằng `.gitkeep`.
 
 Tài liệu nền tảng: [Phân tích hệ thống FindBack](https://docs.google.com/document/d/1F8Ngu5ViIxa2_9FLnt-T6s5GJ4o-B8GCtC_KmvlPFOg/edit?usp=sharing).
 
@@ -38,7 +38,7 @@ React UI → FastAPI routers → services → repositories → PostgreSQL
 | Môi trường | Docker Compose | Chạy các thành phần khi có cấu hình |
 | Quản lý công việc | GitHub Projects | Theo dõi phân công và tiến độ |
 
-Chưa chốt phiên bản công nghệ hoặc công cụ build frontend. Dependency, lockfile và lệnh chạy sẽ được thêm khi khởi tạo ứng dụng thực tế.
+Dependency SQLAlchemy, Alembic và PostgreSQL driver được khai báo tại `backend/requirements.txt`. Chưa chốt phiên bản các thành phần còn lại hoặc công cụ build frontend.
 
 ## 3. Cấu trúc thư mục
 

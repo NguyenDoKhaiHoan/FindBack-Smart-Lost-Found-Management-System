@@ -35,6 +35,8 @@ class IdentitySchemaTests(unittest.TestCase):
     def test_login_accepts_existing_passwords_without_signup_policy(self) -> None:
         request = LoginRequest(email="person@example.com", password="legacy")
         self.assertEqual(request.password, "legacy")
+        with self.assertRaises(ValidationError):
+            LoginRequest(email="person@example.com", password="a" * 73)
 
     def test_user_read_excludes_password_fields(self) -> None:
         user = UserRead(

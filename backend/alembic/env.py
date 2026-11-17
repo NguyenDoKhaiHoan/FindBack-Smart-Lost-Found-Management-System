@@ -4,8 +4,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from app.core.config import load_environment
 from app.db.base import Base
 import app.modules.identity.models
+
+load_environment()
 
 config = context.config
 

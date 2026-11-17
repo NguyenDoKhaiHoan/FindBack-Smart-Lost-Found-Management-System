@@ -3,6 +3,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
+def _validate_bcrypt_password_length(value: str) -> str:
+    if len(value.encode("utf-8")) > 72:
+        raise ValueError("Password must not exceed 72 UTF-8 bytes")
+    return value
+
+
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -18,6 +24,7 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, value: str) -> str:
+        _validate_bcrypt_password_length(value)
         requirements = (
             (any(char.islower() for char in value), "a lowercase letter"),
             (any(char.isupper() for char in value), "an uppercase letter"),
@@ -42,6 +49,11 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_length(cls, value: str) -> str:
+        return _validate_bcrypt_password_length(value)
 
 
 class TokenResponse(BaseModel):

@@ -44,17 +44,14 @@ pip install -r requirements.txt
 
 ## Cấu hình database và JWT
 
-Đặt `DATABASE_URL` trỏ đến database PostgreSQL đã tạo (không commit thông tin đăng nhập):
+Từ repository root, tạo `.env` từ template rồi cập nhật URL PostgreSQL và secret JWT (không commit `.env`):
 
 ```powershell
-$env:DATABASE_URL = "postgresql+psycopg://<user>:<password>@localhost:5432/findback"
+Copy-Item .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Tạo secret JWT riêng cho môi trường development trước khi gọi API:
-
-```powershell
-$env:JWT_SECRET_KEY = python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
+Dán kết quả lệnh tạo secret vào `JWT_SECRET_KEY` trong `.env`. Backend đọc `.env` ở repository root; biến môi trường đã export sẽ được ưu tiên hơn giá trị trong file.
 
 Từ thư mục `backend`, áp dụng migrations (nếu đang ở repository root, chuyển vào `backend` trước):
 
@@ -89,7 +86,7 @@ python -m uvicorn app.main:app --reload --app-dir backend
 
 Mở `http://127.0.0.1:8000/docs` để xem OpenAPI UI. Các endpoint Identity gồm `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/users/me` và `PATCH /api/v1/users/me`. Đăng nhập trả bearer token; dùng nút **Authorize** trong `/docs` để thử hai endpoint `/users/me`.
 
-`DATABASE_URL` ưu tiên hơn URL placeholder trong `alembic.ini`. Các quan hệ đến posts, claims và notifications chưa được ánh xạ cho đến khi model tương ứng được triển khai. `password_hash` chỉ lưu Argon2 hash; không ghi mật khẩu dạng rõ.
+`DATABASE_URL` ưu tiên hơn URL placeholder trong `alembic.ini`. Các quan hệ đến posts, claims và notifications chưa được ánh xạ cho đến khi model tương ứng được triển khai. Mật khẩu mới được hash bằng bcrypt; hash Argon2 cũ được nâng cấp sang bcrypt sau lần đăng nhập thành công tiếp theo.
 
 ## Các bước tiếp theo
 

@@ -6,6 +6,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.config import load_environment
+
+load_environment()
+
 
 @lru_cache(maxsize=1)
 def _session_factory() -> sessionmaker[Session]:
