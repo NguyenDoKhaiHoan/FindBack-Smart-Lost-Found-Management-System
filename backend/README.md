@@ -86,6 +86,24 @@ python -m uvicorn app.main:app --reload --app-dir backend
 
 Mở `http://127.0.0.1:8000/docs` để xem OpenAPI UI. Các endpoint Identity gồm `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/users/me` và `PATCH /api/v1/users/me`. Đăng nhập trả bearer token; dùng nút **Authorize** trong `/docs` để thử hai endpoint `/users/me`.
 
+### Thử GET/PATCH profile trong Swagger
+
+1. Gọi `POST /api/v1/auth/register` để tạo user, sau đó `POST /api/v1/auth/login` bằng email/password.
+2. Sao chép giá trị `access_token` từ response login.
+3. Nhấn **Authorize** trong Swagger UI và nhập `Bearer <access_token>` (hoặc dán token nếu hộp thoại tự thêm tiền tố Bearer), rồi xác nhận.
+4. Gọi `GET /api/v1/users/me` để đọc profile; response chỉ có `id`, `email`, `full_name`, `phone`, `avatar_url`, `role`, `created_at`.
+5. Gọi `PATCH /api/v1/users/me` với một phần các trường được phép, ví dụ:
+
+```json
+{
+  "full_name": "Nguyen Van A",
+  "phone": "0900000000",
+  "avatar_url": "https://example.com/avatar.png"
+}
+```
+
+Chỉ `full_name`, `phone`, `avatar_url` được cập nhật; gửi trường khác sẽ bị từ chối. Có thể đặt `phone` hoặc `avatar_url` thành `null` để xóa giá trị. Cả hai endpoint profile yêu cầu bearer token hợp lệ.
+
 `DATABASE_URL` ưu tiên hơn URL placeholder trong `alembic.ini`. Các quan hệ đến posts, claims và notifications chưa được ánh xạ cho đến khi model tương ứng được triển khai. Mật khẩu mới được hash bằng bcrypt; hash Argon2 cũ được nâng cấp sang bcrypt sau lần đăng nhập thành công tiếp theo.
 
 ## Các bước tiếp theo

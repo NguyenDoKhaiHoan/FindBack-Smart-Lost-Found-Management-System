@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.modules.identity.models.user import User
+from app.modules.identity.repositories import user_repository
 from app.modules.identity.security import get_user_id_from_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -21,7 +22,7 @@ def get_current_user(
         )
 
     user_id = get_user_id_from_token(credentials.credentials)
-    user = db.get(User, user_id)
+    user = user_repository.get_by_id(db, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

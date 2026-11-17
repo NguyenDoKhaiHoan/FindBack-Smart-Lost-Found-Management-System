@@ -25,6 +25,10 @@ from app.modules.identity.schemas import (
 )
 from app.modules.identity.security import get_user_id_from_token
 from app.modules.identity.services.auth_service import authenticate_user
+from app.modules.identity.services.user_service import (
+    get_user_profile,
+    update_user_profile,
+)
 
 legacy_password_context = CryptContext(schemes=["argon2"])
 
@@ -93,15 +97,47 @@ class IdentityRouteTests(unittest.TestCase):
                 credentials=token.access_token,
             )
             current_user = get_current_user(credentials, self.db)
-            self.assertEqual(read_current_user(current_user).email, "person@example.com")
+            profile = read_current_user(current_user)
+            self.assertEqual(profile.email, "person@example.com")
+            self.assertNotIn("password_hash", profile.model_dump())
+            self.assertNotIn("password_hash", UserRead.model_fields)
 
             updated_user = update_current_user(
-                UserUpdate(full_name="Morgan L.", phone="123456"),
+                UserUpdate(
+                    full_name="Morgan L.",
+                    phone="123456",
+                    avatar_url="https://example.com/avatar.png",
+                ),
                 current_user,
                 self.db,
             )
         self.assertEqual(updated_user.full_name, "Morgan L.")
         self.assertEqual(updated_user.phone, "123456")
+        self.assertEqual(str(updated_user.avatar_url), "https://example.com/avatar.png")
+
+    def test_profile_service_reads_and_clears_optional_fields(self) -> None:
+        user = register(
+            RegisterRequest(
+                email="profile@example.com",
+                password="StrongPass1!",
+                full_name="Profile User",
+            ),
+            self.db,
+        )
+        stored_user = self.db.scalar(
+            select(User).where(User.email == "profile@example.com")
+        )
+        assert stored_user is not None
+        self.assertEqual(get_user_profile(stored_user).id, user.id)
+
+        updated = update_user_profile(
+            self.db,
+            stored_user,
+            UserUpdate(phone=None, avatar_url=None),
+        )
+        self.assertIsNone(updated.phone)
+        self.assertIsNone(updated.avatar_url)
+        self.assertNotIn("password_hash", updated.model_dump())
 
     def test_login_rejects_invalid_password(self) -> None:
         register(
