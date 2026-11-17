@@ -1,43 +1,186 @@
-# Backend FindBack
+# Backend FindBack – Smart Lost & Found Management System
 
-Backend dự kiến dùng FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Alembic và pytest. Đây là cấu trúc chuẩn bị phát triển; chưa có entrypoint, dependency manifest, migration hoặc API hoạt động.
+Backend được phát triển bằng **Python 3.11**, **FastAPI**, **SQLAlchemy 2.x Async**, **asyncpg**, **PostgreSQL 16**, **Alembic** và **pytest** theo kiến trúc **Modular Monolith**.
 
-## Cấu trúc một module
+---
+
+## 1. Kiến trúc Modular Monolith
+
+Dự án áp dụng cấu trúc phân tầng nghiêm ngặt:
+`Router → Service → Repository → PostgreSQL (asyncpg)`
 
 ```text
-app/modules/<module>/
-├── routers/         # HTTP endpoint, dependency và chuyển tiếp đến service
-├── schemas/         # Pydantic request/response; tách dữ liệu công khai/riêng tư
-├── services/        # Use case, quyền nghiệp vụ, state machine, transaction
-├── repositories/    # Truy vấn và ghi dữ liệu bằng session được truyền vào
-└── models/          # SQLAlchemy models thuộc module
+backend/
+├── alembic/                      # Async Alembic migrations
+│   ├── versions/                 # Migration version scripts
+│   └── env.py                    # Async migration engine runner
+├── app/
+│   ├── api/                      # (Dành cho routing tổng quát)
+│   ├── core/                     # Cấu hình Settings, Dependencies, Auth adapter
+│   ├── db/                       # Base, Async Engine, SessionLocal, Models registry
+│   ├── shared/                   # Custom HTTP Exceptions (NotFoundError, ForbiddenError, etc.)
+│   └── modules/
+│       ├── identity/             # Shared User persistence model & Auth (TV1)
+│       ├── posts/                # Posts & Images management (TV2)
+│       ├── matching/             # Categories & Matching engine (TV3)
+│       ├── claims_returns/       # Claims & Returns workflow (TV4)
+│       └── notifications_admin/  # Notifications & Admin moderation (TV5 - KAN-31)
+│           ├── models/           # Notification SQLAlchemy model
+│           ├── schemas/          # Pydantic v2 schemas (contract KAN-30)
+│           ├── repositories/     # Async database access layer
+│           ├── services/         # Business logic & inter-module event contract
+│           └── routers/          # FastAPI HTTP endpoints
+├── tests/
+│   ├── conftest.py               # Async fixtures (test_engine, db_session, client, test_users)
+│   ├── api/                      # API endpoint tests (test_notifications.py)
+│   └── unit/                     # Unit tests for services & repositories
+├── alembic.ini                   # Alembic configuration
+├── pytest.ini                    # Pytest configuration (asyncio_mode = auto)
+└── requirements.txt              # Dependency manifest
 ```
 
-| Module | Chủ trì | Dữ liệu phụ trách |
-| --- | --- | --- |
-| `identity` | TV1 | users |
-| `posts` | TV2 | posts, post_images |
-| `matching` | TV3 | categories, matches |
-| `claims_returns` | TV4 | claims, claim_evidence, returns |
-| `notifications_admin` | TV5 | notifications, reports; điều phối audit_logs |
+---
 
-`audit_logs` phục vụ mọi module; TV5 điều phối cấu trúc và nơi ghi log, từng service chịu trách nhiệm phát sinh sự kiện cho hành động của mình. Đây là quy ước tổ chức đề xuất, cần thống nhất khi thiết kế schema.
+## 2. Cài đặt và môi trường phát triển
 
-## Thư mục dùng chung
+### 2.1. Cài đặt Python Dependencies
 
-- `app/api/`: tập hợp router và dependency HTTP dùng chung.
-- `app/core/`: đọc cấu hình, JWT/RBAC, logging; không chứa nghiệp vụ riêng của một module.
-- `app/db/`: engine, session, metadata và cơ sở transaction.
-- `app/shared/`: exception và tiện ích có nhiều module sử dụng; tránh gom mọi logic vào đây.
-- `alembic/versions/`: migration có thứ tự; hiện chưa khởi tạo môi trường Alembic.
-- `tests/unit/<module>/`, `tests/integration/`, `tests/api/`: xem [kế hoạch kiểm thử](../docs/testing.md).
+Khuyến nghị sử dụng Python 3.11 trong virtual environment:
 
-## Trước khi chạy được backend
+```bash
+cd backend
+python -m venv .venv
 
-1. Chốt phiên bản Python và khai báo dependency/lockfile.
-2. Thêm application factory hoặc entrypoint FastAPI và cấu hình môi trường.
-3. Khởi tạo session PostgreSQL, models, Alembic và migration đầu tiên.
-4. Mount routers, định nghĩa schemas và triển khai từng use case.
-5. Bổ sung fixture, test và lệnh chạy được kiểm chứng vào README này.
+# Kích hoạt trên Windows PowerShell:
+.venv\Scripts\Activate.ps1
 
-Không phục vụ bằng chứng sở hữu bằng static/public route. Đường dẫn upload trong `.env.example` là đề xuất local, không phải cơ chế bảo vệ đã triển khai.
+# Cài đặt thư viện:
+pip install -r requirements.txt
+```
+
+### 2.2. Cấu hình biến môi trường (`.env`)
+
+Sao chép từ file mẫu tại thư mục gốc repository:
+
+```bash
+cp ../.env.example ../.env
+```
+
+Nội dung `.env` chuẩn kết nối PostgreSQL async:
+
+```env
+ENVIRONMENT=development
+DEBUG=true
+PROJECT_NAME="FindBack"
+API_V1_STR="/api/v1"
+
+# Database Configuration (PostgreSQL 16)
+POSTGRES_SERVER=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=findback
+POSTGRES_PASSWORD=findback_secret
+POSTGRES_DB=findback
+
+# Async SQLAlchemy Database URL
+DATABASE_URL=postgresql+asyncpg://findback:findback_secret@localhost:5432/findback
+TEST_DATABASE_URL=postgresql+asyncpg://findback:findback_secret@localhost:5432/findback_test
+```
+
+---
+
+## 3. Khởi chạy Database & Migration
+
+### 3.1. Khởi chạy PostgreSQL Container
+
+Sử dụng Docker Compose tại thư mục `infra/docker/`:
+
+```bash
+docker compose -f ../infra/docker/compose.yaml up -d
+```
+
+### 3.2. Chạy Migration Alembic
+
+Áp dụng toàn bộ migration vào cơ sở dữ liệu:
+
+```bash
+cd backend
+python -m alembic upgrade head
+```
+
+Kiểm tra trạng thái migration:
+
+```bash
+python -m alembic current
+```
+
+Rollback migration (nếu cần):
+
+```bash
+python -m alembic downgrade -1
+```
+
+---
+
+## 4. Khởi chạy Backend Server
+
+Khởi chạy máy chủ phát triển với Uvicorn:
+
+```bash
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Lưu ý: nếu cổng 8000 đang được sử dụng bởi dịch vụ khác, có thể đổi sang --port 8001
+```
+
+Truy cập tài liệu OpenAPI / Swagger UI:
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs) (hoặc port tương ứng)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health) hoặc [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
+
+---
+
+## 5. Chạy Test Suite
+
+Chạy toàn bộ unit test và integration/API test bằng Pytest:
+
+```bash
+cd backend
+python -m pytest -v
+```
+
+> **Cách ly cơ sở dữ liệu kiểm thử (TEST-01):**
+> Test suite tự động kết nối đến database riêng biệt `findback_test` (thông qua cấu hình `TEST_DATABASE_URL`), tự động dọn dẹp (truncate) dữ liệu bảng sau mỗi test, đảm bảo tuyệt đối không làm ảnh hưởng hoặc tích lũy dữ liệu rác trên database phát triển `findback`.
+
+Kiểm tra chi tiết từng file:
+
+```bash
+python -m pytest tests/api/test_notifications.py -v
+python -m pytest tests/unit/notifications_admin/test_notification_service.py -v
+```
+
+---
+
+## 6. Chi tiết triển khai Module Notifications (KAN-31)
+
+### 6.1. API Endpoints
+
+Tuân thủ nghiêm ngặt đặc tả tại `docs/api/API_CONTRACT_NOTIFICATIONS_ADMIN.md`:
+
+| Phương thức | Endpoint | Mô tả | Quyền truy cập |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/notifications` | Lấy danh sách thông báo phân trang của user hiện tại | User đăng nhập (`ACTIVE`) |
+| `PATCH` | `/api/v1/notifications/{id}/read` | Đánh dấu thông báo đã đọc (idempotent) | Chủ sở hữu thông báo (`ACTIVE`) |
+
+### 6.2. Cơ chế Xác thực & RBAC (SEC-01 & SEC-02)
+
+- Dependency `get_current_active_user` xác thực chữ ký mật mã JWT (sử dụng `PyJWT`) với thuật toán máy chủ cấu hình cố định (`HS256`), kiểm tra thời hạn hiệu lực (`exp`), và giải mã user UUID từ claim `sub`.
+- Tuyệt đối không chấp nhận chuỗi UUID thô và đã loại bỏ hoàn toàn header bypass `X-User-Id`.
+- Kiểm tra trạng thái tài khoản: Nếu user không ở trạng thái `ACTIVE` (ví dụ `SUSPENDED` hoặc `DISABLED`), hệ thống trả về HTTP `403 Forbidden`.
+- Người dùng chỉ xem được thông báo có `recipient_id == current_user.id`.
+- Thao tác đánh dấu đã đọc đối với thông báo không thuộc quyền sở hữu sẽ trả về HTTP `404 Not Found` để chống brute-force và enumerate ID tài nguyên.
+
+### 6.3. Giao diện Event Service nội bộ (`NotificationService`)
+
+Tuân thủ đặc tả tại `docs/api/NOTIFICATION_EVENT_CONTRACT.md`:
+- Các module khác (`claims_returns`, `posts`) phát thông báo thông qua phương thức `NotificationService.create_notification(session, data, auto_commit=True)`.
+- **Deduplication / Concurrency Idempotency (CONC-01)**: Áp dụng câu lệnh PostgreSQL `INSERT ... ON CONFLICT (event_id) DO NOTHING`, bảo đảm xử lý an toàn đồng thời, không sinh lỗi unhandled `IntegrityError` hay HTTP 500 khi nhiều request đồng thời cùng phát một `event_id`. Hỗ trợ tham gia vào transaction của caller mà không phá vỡ transaction.
+- **Deep Allowlist Sanitization (PRIV-01)**: Áp dụng cơ chế Whitelist (Allowlist) kết hợp duyệt đệ quy đa tầng, loại bỏ triệt để token, mật khẩu, api key hoặc bằng chứng riêng tư ở bất kỳ cấp độ nào của cấu trúc metadata.
