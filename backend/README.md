@@ -86,6 +86,17 @@ python -m uvicorn app.main:app --reload --app-dir backend
 
 Mở `http://127.0.0.1:8000/docs` để xem OpenAPI UI. Các endpoint Identity gồm `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/users/me` và `PATCH /api/v1/users/me`. Đăng nhập trả bearer token; dùng nút **Authorize** trong `/docs` để thử hai endpoint `/users/me`.
 
+## Chạy kiểm thử
+
+Từ thư mục `backend`, cài dependency kiểm thử và chạy toàn bộ test:
+
+```powershell
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
+
+Integration test sử dụng SQLite in-memory riêng cho từng test case, không cần kết nối PostgreSQL và tự xóa schema/dữ liệu sau khi chạy.
+
 ### Thử GET/PATCH profile trong Swagger
 
 1. Gọi `POST /api/v1/auth/register` để tạo user, sau đó `POST /api/v1/auth/login` bằng email/password.
