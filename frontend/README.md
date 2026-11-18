@@ -1,25 +1,36 @@
-# Frontend FindBack
+# FindBack frontend
 
-Frontend dự kiến dùng React. Bộ khung chưa có `package.json`, dependency, entrypoint hoặc công cụ build; chưa chạy được bằng npm. Vite/TypeScript là lựa chọn có thể cân nhắc, chưa được chốt trong tài liệu phân tích.
+Ứng dụng React dùng trực tiếp [API FindBack](../docs/api/endpoints.md). Trang chủ và tìm kiếm hiển thị các tin trong cơ sở dữ liệu được backend cấu hình. Tin mới, hồ sơ, báo cáo và thông báo được lưu qua API.
 
-| Thư mục | Mục đích |
-| --- | --- |
-| `src/app/` | Khởi tạo ứng dụng, điều hướng, providers, route guards |
-| `src/features/auth/` | Đăng ký, đăng nhập, phiên đăng nhập |
-| `src/features/profile/` | Hồ sơ người dùng |
-| `src/features/posts/` | Danh sách, chi tiết, tạo/sửa tin LOST/FOUND |
-| `src/features/search_matching/` | Bộ lọc, gợi ý và tiêu chí matching |
-| `src/features/claims_returns/` | Gửi claim, bằng chứng, xác minh, trao trả |
-| `src/features/notifications/` | Thông báo trong ứng dụng |
-| `src/features/admin/` | Báo cáo, kiểm duyệt, thống kê |
-| `src/components/ui/` | Thành phần UI dùng chung |
-| `src/hooks/`, `src/lib/` | Hook, HTTP client và tiện ích dùng chung |
-| `src/assets/`, `src/styles/` | Tài nguyên và style |
-| `public/` | Tài nguyên công khai được đóng gói cùng frontend |
-| `tests/unit/`, `tests/e2e/` | Kiểm thử giao diện và luồng người dùng |
+## Chạy trong VS Code
 
-Trong từng feature, chỉ thêm `components/`, `pages/`, `api/`, `hooks/` khi triển khai cần đến. Không đặt ảnh upload, bằng chứng hoặc secret vào `public/`, `assets/` hay biến môi trường frontend.
+Chạy backend theo [hướng dẫn](../backend/README.md). Sau đó mở terminal PowerShell thứ hai.
 
-Backend phải kiểm tra quyền cho mọi thao tác; route guard phía frontend chỉ hỗ trợ trải nghiệm. Cần chốt cách quản lý token/cookie và bảo vệ phiên trước khi triển khai auth.
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
 
-Khi khởi tạo React, bổ sung dependency, lockfile, scripts chạy/build/test, cấu hình API URL và hướng dẫn môi trường vào README này.
+Mở [FindBack](http://127.0.0.1:5173). Vite chuyển tiếp `/api` đến cổng `8000` theo mặc định. Nếu backend đang chạy cổng `8001`, đặt `API_PROXY_TARGET=http://127.0.0.1:8001` trong `frontend/.env.local` rồi khởi động lại Vite. Có thể để trống `VITE_API_BASE_URL` khi dùng proxy.
+
+## Luồng sử dụng
+
+- Đăng ký, đăng nhập và sửa hồ sơ. Phiên truy cập được giữ trong bộ nhớ của tab và gia hạn khi tab còn mở.
+- Đăng tin mất hoặc nhặt được, thêm ảnh, tìm kiếm và quản lý tin. Trang **Gợi ý phù hợp** dùng tin đang mở của bạn để tính kết quả.
+- Mở một tin nhặt được, chọn **Đây là đồ của tôi** và gửi mô tả bằng chứng. Khi yêu cầu còn chờ duyệt, người gửi có thể bổ sung ảnh riêng tư.
+- Chủ tin duyệt yêu cầu, lập phiên và ghi nhận đã giao. Người nhận xác nhận sau khi nhận đúng đồ. Cập nhật xuất hiện ở **Thông báo**.
+- Tài khoản có quyền quản trị đã được backend cấp có thể vào **Quản trị** để xem thống kê, xử lý báo cáo và ẩn tin.
+
+## Kiểm tra
+
+```powershell
+npm run lint
+npm test
+npm run build
+npm run test:api
+npm run test:browser
+npm run test:production
+```
+
+`test:api` và `test:browser` cần `backend/.venv` từ `uv sync --locked`. Chạy hai lệnh tuần tự vì dùng chung cổng test backend 18000. Các bài kiểm tra tạo dữ liệu trong SQLite tạm. Trên Windows, bài kiểm tra trình duyệt dùng Chrome đã cài.

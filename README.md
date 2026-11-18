@@ -38,7 +38,7 @@ React UI → FastAPI routers → services → repositories → PostgreSQL
 | Môi trường | Docker Compose | Chạy các thành phần khi có cấu hình |
 | Quản lý công việc | GitHub Projects | Theo dõi phân công và tiến độ |
 
-Backend đã có dependency, lockfile và lệnh chạy tại [backend/README.md](backend/README.md). Công cụ build frontend chưa được khởi tạo.
+Lệnh chạy FastAPI và React/TypeScript nằm trong [hướng dẫn backend](backend/README.md) và [hướng dẫn frontend](frontend/README.md). Web dùng dữ liệu từ API tài khoản, bài đăng, tìm kiếm, gợi ý, trao trả, thông báo và quản trị.
 
 ## 3. Cấu trúc thư mục
 
@@ -135,7 +135,7 @@ git switch -c feat/identity-auth
 4. Nếu dùng cấu hình local, sao chép `.env.example` thành `.env` và thay giá trị mẫu. Docker Compose đọc `POSTGRES_*`; backend đọc `DATABASE_URL`, cấu hình JWT và các biến đã khai báo trong Settings. Có thể dùng `backend/.env` để cấu hình riêng.
 5. Bổ sung migration và kiểm thử cho nghiệp vụ được triển khai, rồi mở pull request.
 
-Có thể chạy PostgreSQL theo [hướng dẫn Docker](infra/docker/README.md), rồi chạy API và pytest theo [backend/README.md](backend/README.md). Frontend vẫn chưa có ứng dụng chạy được.
+Chạy PostgreSQL theo [hướng dẫn Docker](infra/docker/README.md), rồi chạy API và pytest theo [hướng dẫn backend](backend/README.md). Để chạy giao diện, dùng `cd frontend`, `npm ci` và `npm run dev`. Xem cấu hình kết nối API và các lệnh kiểm tra trong [hướng dẫn frontend](frontend/README.md).
 
 ## 7. Quy ước cộng tác
 
