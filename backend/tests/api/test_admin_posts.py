@@ -781,3 +781,97 @@ async def test_concurrent_moderation_from_two_admins(
     notif_res = await db_session.execute(notif_stmt)
     notifications = notif_res.scalars().all()
     assert len(notifications) == 1
+
+
+# ============================================================================
+# 8. KAN-33 API Edge Cases & Parameter Validation
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_admin_posts_pagination_boundary_values(
+    client: AsyncClient,
+    auth_headers_admin: dict[str, str],
+):
+    """Verifies that invalid page and limit query parameters return HTTP 422."""
+    # page < 1
+    res_page_zero = await client.get("/api/v1/admin/posts?page=0", headers=auth_headers_admin)
+    assert res_page_zero.status_code == 422
+
+    res_page_neg = await client.get("/api/v1/admin/posts?page=-5", headers=auth_headers_admin)
+    assert res_page_neg.status_code == 422
+
+    # limit < 1
+    res_limit_zero = await client.get("/api/v1/admin/posts?limit=0", headers=auth_headers_admin)
+    assert res_limit_zero.status_code == 422
+
+    # limit > 100
+    res_limit_exceed = await client.get("/api/v1/admin/posts?limit=101", headers=auth_headers_admin)
+    assert res_limit_exceed.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_posts_combined_filters_and_search(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    test_user_a: User,
+    auth_headers_admin: dict[str, str],
+):
+    """Verifies filtering by status + type + search keyword simultaneously."""
+    # Match: status=ACTIVE, type=LOST, contains "ví da"
+    target_post = await create_test_post(
+        db_session,
+        test_user_a.id,
+        title="Bị mất ví da màu đen tại Cầu Giấy",
+        type_="LOST",
+        status="ACTIVE",
+    )
+    # Different type
+    await create_test_post(
+        db_session,
+        test_user_a.id,
+        title="Tìm thấy ví da màu đen tại Cầu Giấy",
+        type_="FOUND",
+        status="ACTIVE",
+    )
+    # Different keyword
+    await create_test_post(
+        db_session,
+        test_user_a.id,
+        title="Bị rơi chìa khóa xe máy",
+        type_="LOST",
+        status="ACTIVE",
+    )
+    # Different status
+    await create_test_post(
+        db_session,
+        test_user_a.id,
+        title="Bị mất ví da tại siêu thị",
+        type_="LOST",
+        status="HIDDEN",
+    )
+
+    res = await client.get(
+        "/api/v1/admin/posts?status=ACTIVE&type=LOST&q=ví da",
+        headers=auth_headers_admin,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["pagination"]["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["id"] == str(target_post.id)
+    assert data["items"][0]["status"] == "ACTIVE"
+    assert data["items"][0]["type"] == "LOST"
+
+
+@pytest.mark.asyncio
+async def test_admin_posts_invalid_uuid_param_rejected(
+    client: AsyncClient,
+    auth_headers_admin: dict[str, str],
+):
+    """Verifies that non-UUID path parameter format returns HTTP 422 Unprocessable Entity."""
+    res = await client.patch(
+        "/api/v1/admin/posts/not-a-valid-uuid-format/moderation",
+        headers=auth_headers_admin,
+        json={"action": "HIDE", "reason": "Kiểm thử định dạng UUID"},
+    )
+    assert res.status_code == 422

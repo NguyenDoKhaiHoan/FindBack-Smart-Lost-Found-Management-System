@@ -434,3 +434,65 @@ async def test_internal_event_concurrent_deduplication(test_user_a: User):
         count_res = await session.execute(count_stmt)
         total_count = count_res.scalar_one()
         assert total_count == 1
+
+
+# ============================================================================
+# 5. KAN-33 API Edge Cases & Data Privacy
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_notifications_pagination_invalid_params_rejected(
+    client: AsyncClient,
+    auth_headers_user_a: dict[str, str],
+):
+    """Verifies that invalid page and limit query parameters return HTTP 422."""
+    # page < 1
+    res_page_zero = await client.get("/api/v1/notifications?page=0", headers=auth_headers_user_a)
+    assert res_page_zero.status_code == 422
+
+    res_page_neg = await client.get("/api/v1/notifications?page=-1", headers=auth_headers_user_a)
+    assert res_page_neg.status_code == 422
+
+    # limit < 1
+    res_limit_zero = await client.get("/api/v1/notifications?limit=0", headers=auth_headers_user_a)
+    assert res_limit_zero.status_code == 422
+
+    # limit > 100
+    res_limit_exceed = await client.get("/api/v1/notifications?limit=101", headers=auth_headers_user_a)
+    assert res_limit_exceed.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_notification_response_never_leaks_private_fields(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    test_user_a: User,
+    auth_headers_user_a: dict[str, str],
+):
+    """
+    Verifies that the notification listing endpoint never leaks sensitive data,
+    such as password hashes, authentication tokens, or private evidence.
+    """
+    service = NotificationService()
+    await service.create_notification(
+        db_session,
+        NotificationCreateInternal(
+            recipient_id=test_user_a.id,
+            event_type="POST_HIDDEN",
+            title="Bài viết bị ẩn",
+            message="Nội dung thông báo công khai cho người dùng",
+            metadata={
+                "resource_type": "POST",
+                "post_id": str(uuid.uuid4()),
+                "action": "HIDE",
+            },
+        ),
+    )
+
+    res = await client.get("/api/v1/notifications", headers=auth_headers_user_a)
+    assert res.status_code == 200
+
+    raw_response_text = res.text.lower()
+    forbidden_terms = ["password_hash", "access_token", "refresh_token", "private_evidence", "client_secret"]
+    for term in forbidden_terms:
+        assert term not in raw_response_text, f"Forbidden term '{term}' leaked in notification response!"
