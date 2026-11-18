@@ -1,6 +1,6 @@
 {
   "additionalProperties": false,
-  "description": "Private-data-free contract consumed by Notifications after the outbox commit.",
+  "description": "Claim and return events carry only IDs, version and timestamp.",
   "properties": {
     "event_id": {
       "format": "uuid",
@@ -12,7 +12,10 @@
         "claim.created",
         "claim.approved",
         "claim.rejected",
-        "claim.completed"
+        "claim.completed",
+        "claim.evidence_added",
+        "return.arranged",
+        "return.handed_over"
       ],
       "title": "Type",
       "type": "string"

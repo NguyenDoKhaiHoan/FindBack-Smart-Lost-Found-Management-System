@@ -31,8 +31,8 @@ Cờ đóng nhất quán của chính claim được giữ nguyên theo contract
 
 Approve không đóng Post, không tạo Return và không tự reject claim cạnh tranh.
 Reject được xử lý claim PENDING tồn đọng trên tin đã đóng/ẩn hoặc có người thắng.
-Complete không tạo Return hay tự giả lập bước giao đồ. Chưa có endpoint lập lịch/
-ghi HANDED_OVER trong phạm vi sáu API; module Returns phải cung cấp dữ liệu đó.
+Chủ tin lập Return bằng `POST /api/v1/returns` và ghi bước giao đồ bằng
+`PATCH /api/v1/returns/{id}/handover`. Người nhận xác nhận sau bước này.
 
 Khóa Post nối tiếp mọi quyết định trên cùng món đồ. Partial unique index vẫn chặn
 nhiều APPROVED/RETURNED trên cùng Post. PATCH lặp/sai state trả CLAIM_STATE_CONFLICT,
@@ -42,7 +42,7 @@ mọi lỗi khác rollback và trả lỗi server đã làm sạch.
 
 Audit lưu actor/action/claim/post/version trước-sau/thời gian. Cùng transaction ghi
 [sự kiện Notifications vào outbox](claim-notification-events.md), đúng người nhận,
-không evidence/reason. Worker gửi thông báo là phần tích hợp ngoài producer này.
+không evidence/reason. Backend ghi thông báo trong ứng dụng cùng giao dịch.
 
 ## Migration và kiểm tra
 

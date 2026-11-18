@@ -131,6 +131,18 @@ class ClaimService:
         raise AssertionError("Unreachable transaction retry state")
 
     def _mutate_once(self, actor_id, claim_id, body, action) -> ClaimSummary:
+        post, claim = self.lock_related(actor_id, claim_id)
+        if action in {"approved", "rejected"}:
+            allowed = actor_id == post.owner_id and actor_id != claim.claimant_id
+        else:
+            allowed = actor_id == claim.claimant_id
+        if not allowed:
+            raise DomainError(403, "CLAIM_ACTION_FORBIDDEN", "This action is not permitted")
+        expected_status = "APPROVED" if action == "completed" else "PENDING"
+        self.check_state(claim, expected_status, body.expected_version)
+        return self._apply_decision(actor_id, post, claim, body, action, expected_status)
+
+    def lock_related(self, actor_id: UUID, claim_id: UUID):
         not_found = DomainError(404, "CLAIM_NOT_FOUND", "Claim not found")
         post_id = self.claims.related_post_id(claim_id, actor_id)
         if post_id is None:
@@ -142,19 +154,18 @@ class ClaimService:
         # Recheck current ownership and claimant after acquiring locks.
         if actor_id not in {post.owner_id, claim.claimant_id}:
             raise not_found
-        if action in {"approved", "rejected"}:
-            allowed = actor_id == post.owner_id and actor_id != claim.claimant_id
-        else:
-            allowed = actor_id == claim.claimant_id
-        if not allowed:
-            raise DomainError(403, "CLAIM_ACTION_FORBIDDEN", "This action is not permitted")
-        expected_status = "APPROVED" if action == "completed" else "PENDING"
+        return post, claim
+
+    @staticmethod
+    def check_state(claim, expected_status, expected_version):
         if claim.status != expected_status:
             raise DomainError(409, "CLAIM_STATE_CONFLICT", "Claim is not in the required state")
-        if claim.version != body.expected_version:
+        if claim.version != expected_version:
             raise DomainError(
                 409, "CLAIM_VERSION_CONFLICT", "Claim has changed; reload before acting"
             )
+
+    def _apply_decision(self, actor_id, post, claim, body, action, expected_status) -> ClaimSummary:
         now = utcnow()
         if action == "approved":
             if self.claims.has_winner(post.id, exclude_claim_id=claim.id):

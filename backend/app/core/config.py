@@ -11,7 +11,7 @@ class Settings(BaseSettings):
         env_file=(BACKEND_DIR.parent / ".env", BACKEND_DIR / ".env"), extra="ignore"
     )
 
-    app_name: str = "FindBack Claims API"
+    app_name: str = "FindBack API"
     app_env: str = "development"
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'findback.db').as_posix()}"
     database_schema: str = Field(default="findback_api", pattern=r"^[a-z][a-z0-9_]{0,62}$")
@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_issuer: str = "findback"
     jwt_audience: str = "findback-api"
+    media_root: Path = BACKEND_DIR / "uploads"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @field_validator("jwt_secret_key")
     @classmethod

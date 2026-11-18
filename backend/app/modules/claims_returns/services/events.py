@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.claims_returns.models.claim import AuditLog, OutboxEvent
 from app.modules.notifications_admin.schemas.claim_events import ClaimNotificationEvent
+from app.modules.notifications_admin.services.notification_service import stage_claim_notification
 
 
 def record_claim_event(
@@ -19,7 +20,7 @@ def record_claim_event(
     version: int,
     occurred_at: datetime,
 ):
-    """Stage audit + event in the caller's transaction, without delivering before commit."""
+    """Stage audit, outbox and in-app delivery in the same database transaction."""
     event = ClaimNotificationEvent(
         event_id=uuid4(),
         type=action,
@@ -48,3 +49,4 @@ def record_claim_event(
             payload=event.model_dump(mode="json"),
         )
     )
+    stage_claim_notification(session, event)

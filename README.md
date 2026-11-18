@@ -2,7 +2,7 @@
 
 FindBack là nền tảng quản lý tin mất đồ và nhặt được đồ, gợi ý các tin liên quan, hỗ trợ xác minh quyền sở hữu và ghi nhận quá trình trao trả.
 
-**Trạng thái:** đã có [backend sáu API Claims](backend/README.md): tạo/danh sách/chi tiết, approve/reject/complete; JWT, repository, migration Alembic và audit/outbox trong schema `findback_api`. Xem [kiểm tra quyền](docs/api/claims-implementation.md) và [transaction, quyết định/trao trả, sự kiện Notifications](docs/api/claims-decisions-implementation.md). PostgreSQL local qua [Docker Compose](infra/docker/README.md); các module khác vẫn là bộ khung. Swagger: http://127.0.0.1:8000/docs sau khi chạy backend.
+Một backend FastAPI phục vụ Identity, Posts, Search & Matching, Claims & Returns và Notifications & Admin. Xem [danh mục API](docs/api/endpoints.md) và [hướng dẫn chạy](backend/README.md).
 
 Tài liệu nền tảng: [Phân tích hệ thống FindBack](https://docs.google.com/document/d/1F8Ngu5ViIxa2_9FLnt-T6s5GJ4o-B8GCtC_KmvlPFOg/edit?usp=sharing).
 
@@ -84,7 +84,7 @@ FindBack/
 ├── docs/
 │   ├── requirements.md          # Phạm vi, BR-01 đến BR-09, quy tắc
 │   ├── architecture.md          # Ranh giới module và quy ước tầng
-│   ├── api/endpoints.md         # Danh sách sơ bộ 30 API
+│   ├── api/endpoints.md         # Danh mục API và luồng nghiệp vụ
 │   ├── database/README.md       # 11 bảng dự kiến, ràng buộc cần thiết kế
 │   ├── roadmap.md               # Lộ trình tương đối 21 ngày
 │   └── testing.md               # Kế hoạch kiểm thử và tiêu chí MVP

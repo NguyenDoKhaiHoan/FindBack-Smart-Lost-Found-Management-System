@@ -16,7 +16,7 @@ bearer = HTTPBearer(auto_error=False, scheme_name="BearerAuth")
 
 
 def create_access_token(user: User, settings: Settings, *, lifetime=timedelta(hours=1)) -> str:
-    """For the Identity adapter and local demo CLI; never a public token-issuing route."""
+    """Issue a token accepted by all FindBack modules."""
     now = utcnow()
     return jwt.encode(
         {
@@ -62,5 +62,18 @@ def get_current_user(
     if user is None or user.token_version != version or session.get(RevokedToken, jti):
         raise unauthenticated
     if not user.is_active:
-        raise DomainError(403, "ACCOUNT_FORBIDDEN", "This account cannot access claims")
+        raise DomainError(403, "ACCOUNT_FORBIDDEN", "This account is inactive")
     return user
+
+
+DatabaseSession = Annotated[Session, Depends(get_session)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_admin(user: CurrentUser) -> User:
+    if user.role != "ADMIN":
+        raise DomainError(403, "ADMIN_REQUIRED", "Administrator access is required")
+    return user
+
+
+CurrentAdmin = Annotated[User, Depends(require_admin)]

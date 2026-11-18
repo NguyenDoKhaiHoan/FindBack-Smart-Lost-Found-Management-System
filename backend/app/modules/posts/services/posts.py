@@ -31,7 +31,12 @@ class PostService:
                 Post.is_hidden.is_(False),
                 Post.type == "FOUND",
             )
-            .values(status="CLOSED", completed_claim_id=claim_id, completed_at=occurred_at)
+            .values(
+                status="CLOSED",
+                completed_claim_id=claim_id,
+                completed_at=occurred_at,
+                updated_at=occurred_at,
+            )
             .execution_options(synchronize_session=False)
         )
         if result.rowcount != 1:

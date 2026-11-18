@@ -135,6 +135,7 @@ def world(tmp_path, request):
         database_url=test_url if use_postgres else f"sqlite:///{tmp_path / 'claims.db'}",
         database_schema=schema or "findback_api",
         jwt_secret_key="test-only-" + "x" * 48,
+        media_root=tmp_path / "uploads",
     )
     engine = make_engine(settings)
     migrate(engine, schema=schema)

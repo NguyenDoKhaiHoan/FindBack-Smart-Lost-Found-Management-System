@@ -434,14 +434,14 @@ def test_return_summary_is_serialized_without_private_fields(world):
     assert response.json()["return_summary"]["status"] == "HANDED_OVER"
 
 
-def test_swagger_and_runtime_openapi_expose_only_implemented_claim_operations(world):
+def test_swagger_and_runtime_openapi_preserve_claim_operations(world):
     response = world.client.get("/docs")
     assert response.status_code == 200
     assert "/swagger-assets/swagger-ui-bundle.js" in response.text
     assert world.client.get("/swagger-assets/swagger-ui-bundle.js").status_code == 200
     spec = world.client.get("/openapi.json").json()
-    assert set(spec["paths"]) == set(CONTRACT["paths"])
-    for path, operations in spec["paths"].items():
-        for operation in operations.values():
-            assert operation["security"] == [{"BearerAuth": []}]
+    assert set(CONTRACT["paths"]) <= set(spec["paths"])
+    for path, operations in CONTRACT["paths"].items():
+        for method in operations:
+            assert spec["paths"][path][method]["security"] == [{"BearerAuth": []}]
     assert "BearerAuth" in spec["components"]["securitySchemes"]
