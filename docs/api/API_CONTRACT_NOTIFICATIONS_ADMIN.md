@@ -1,107 +1,106 @@
-# API Contract – Notifications/Admin
+# API Contract – Notifications & Admin
 
-- **Jira:** KAN-30
-- **Phạm vi:** Đặc tả 4 API Notifications/Admin
-- **Trạng thái tài liệu:** Draft – cần xác nhận các mục `PENDING CONFIRMATION`
-- **Base path dự kiến:** `/api/v1`
-- **Backend:** FastAPI / PostgreSQL
+- **Jira:** KAN-30 / KAN-32 / KAN-34
+- **Phạm vi:** Đặc tả chuẩn hóa 4 API cốt lõi của Notifications và Admin Post Moderation
+- **Trạng thái tài liệu:** Chuẩn hóa chính thức theo mã nguồn triển khai thực tế (KAN-34 Verified)
+- **Base path:** `/api/v1`
+- **Backend:** FastAPI 0.115+ / SQLAlchemy 2.0 Async / PostgreSQL 16
+- **Định dạng khóa chính (ID):** RFC 4122 UUID (UUIDv4 / UUIDv5) trên toàn hệ thống
 
-> Tài liệu này là hợp đồng API ở mức thiết kế. Nó không khẳng định các endpoint đã được triển khai. Những chi tiết chưa có trong Jira hoặc tài liệu nền được đánh dấu là đề xuất hoặc cần xác nhận với module sở hữu.
+---
 
 ## 1. Mục tiêu và phạm vi
 
-Đặc tả đúng 4 endpoint:
+Tài liệu này đặc tả chính xác 4 endpoint API công khai:
 
-1. `GET /api/v1/notifications`
-2. `PATCH /api/v1/notifications/{id}/read`
-3. `GET /api/v1/admin/posts`
-4. `PATCH /api/v1/admin/posts/{id}/moderation`
+1. `GET /api/v1/notifications` – Lấy danh sách thông báo người dùng theo phân trang và bộ lọc.
+2. `PATCH /api/v1/notifications/{id}/read` – Đánh dấu thông báo đã đọc (idempotent, cô lập quyền sở hữu).
+3. `GET /api/v1/admin/posts` – Lấy danh sách bài đăng hệ thống dành cho Quản trị viên (Admin).
+4. `PATCH /api/v1/admin/posts/{id}/moderation` – Kiểm duyệt ẩn bài đăng vi phạm (Admin Moderation).
 
-Không bổ sung endpoint công khai khác trong KAN-30. Giao diện tạo thông báo từ sự kiện nghiệp vụ được mô tả riêng trong `NOTIFICATION_EVENT_CONTRACT.md`; đó là interface nội bộ, không phải HTTP endpoint.
+Giao tiếp nội bộ liên module (tạo thông báo từ Claims, Posts, Matching) được đặc tả riêng trong [`NOTIFICATION_EVENT_CONTRACT.md`](file:///c:/Users/GF63/OneDrive/Tài%20li%C3%AA%CC%A3u/Th%E1%BB%B1c%20t%E1%BA%ADp%20FPT/FindBack/FindBack-Smart-Lost-Found-Management-System/docs/api/NOTIFICATION_EVENT_CONTRACT.md).
+
+---
 
 ## 2. Quy ước chung
 
-### 2.1. Authentication
+### 2.1. Authentication & Authorization (RBAC)
+- **Header:** Tất cả các endpoint đều yêu cầu xác thực qua HTTP Bearer token:
+  ```http
+  Authorization: Bearer <access_token_jwt>
+  ```
+- **Dependency xác thực (`app.core.dependencies`):**
+  - `get_current_active_user`: Giải mã JWT token (thuật toán HS256, khóa bí mật từ cấu hình hệ thống), kiểm tra hạn sử dụng (`exp`), xác thực `sub` là UUID hợp lệ, truy vấn database đảm bảo tài khoản tồn tại và có `status == "ACTIVE"`.
+  - `get_current_admin_user`: Kế thừa `get_current_active_user`, đồng thời kiểm tra `current_user.is_admin is True`.
+- **Nguyên tắc bảo vệ danh tính:** Client không được phép tự truyền `recipient_id`, `actor_id` hoặc header giả mạo `X-User-Id`. Danh tính người dùng được trích xuất an toàn từ payload token.
 
-- Các endpoint đều yêu cầu người gọi đã đăng nhập.
-- Danh tính người gọi phải lấy từ cơ chế xác thực chung của module Identity.
-- Interface dự kiến từ Identity: dependency tương đương `get_current_active_user`, trả về user có tối thiểu `id`, `role`, `status`.
-- Tên dependency, kiểu đối tượng và cách biểu diễn role/status: **PENDING CONFIRMATION WITH TV1 – IDENTITY**.
-- User không được tự gửi `recipient_id` hoặc `actor_id` để thay thế danh tính lấy từ token.
+### 2.2. Kiểu dữ liệu ID và Thời gian
+- **ID:** Toàn bộ ID (Notification ID, Post ID, User ID, Claim ID) sử dụng chuẩn **RFC 4122 UUIDv4** (chuỗi 36 ký tự dạng `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`). Tuyệt đối không sử dụng số nguyên BIGINT.
+- **Thời gian:** Biểu diễn theo chuẩn ISO 8601 UTC (`YYYY-MM-DDTHH:MM:SSZ`), ví dụ: `2026-11-18T10:30:00Z`.
+- **Content-Type:** `application/json; charset=utf-8`.
 
-### 2.2. Content-Type và thời gian
+### 2.3. Quy ước Phân trang (Pagination)
+Tất cả các endpoint danh sách đều tuân theo cấu trúc phân trang:
+- `page`: Số trang, bắt đầu từ 1 (`ge=1`), mặc định `1`.
+- `limit`: Số bản ghi trên mỗi trang, từ 1 đến 100 (`ge=1, le=100`), mặc định `20`.
+- **Thứ tự sắp xếp mặc định:** Sắp xếp theo thời gian tạo mới nhất trước: `created_at DESC, id DESC` (đảm bảo tính ổn định của phân trang khi có nhiều bản ghi cùng timestamp).
 
-- Request/response JSON dùng `application/json`.
-- Thời gian biểu diễn theo ISO 8601; dữ liệu lưu trữ dự kiến dùng `TIMESTAMPTZ` theo schema SQL hiện có.
-- Ví dụ timestamp trong tài liệu dùng UTC (`Z`).
-
-### 2.3. Phân trang
-
-Đề xuất dùng chung:
-
-| Parameter | Kiểu | Mặc định | Quy tắc đề xuất |
-|---|---|---:|---|
-| `page` | integer | 1 | `>= 1` |
-| `limit` | integer | 20 | `1..100` |
-
-Giới hạn tối đa `100` là đề xuất cần thống nhất với nhóm. Thứ tự mặc định đề xuất là mới nhất trước (`created_at DESC`), thêm khóa phụ `id DESC` để thứ tự ổn định.
-
-Response phân trang đề xuất:
-
+Cấu trúc metadata phân trang:
 ```json
 {
-  "items": [],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 0,
-    "total_pages": 0
-  }
+  "page": 1,
+  "limit": 20,
+  "total": 42,
+  "total_pages": 3
 }
 ```
 
-## 3. Ma trận phân quyền
+---
 
-| Vai trò | GET notifications | PATCH notification read | GET admin posts | PATCH moderation |
-|---|---:|---:|---:|---:|
-| Chưa đăng nhập | 401 | 401 | 401 | 401 |
-| User đang hoạt động | Chỉ thông báo của mình | Chỉ thông báo của mình | 403 | 403 |
-| Admin đang hoạt động | Chỉ thông báo của mình | Chỉ thông báo của mình | Cho phép | Cho phép |
-| Tài khoản không hoạt động | Bị từ chối theo Identity policy | Bị từ chối theo Identity policy | Bị từ chối | Bị từ chối |
+## 3. Ma trận Phân quyền & Cô lập Dữ liệu (Permission Matrix)
 
-`Admin` vẫn chỉ xem/đánh dấu thông báo có `recipient_id` bằng ID của chính mình. Vai trò admin không mặc nhiên cho phép đọc thông báo của người khác.
+| Chức năng | User thường | Admin | Mã HTTP thực tế | Cơ chế kiểm soát |
+| :--- | :---: | :---: | :---: | :--- |
+| **Xem notification của mình** (`GET /notifications`) | Cho phép (Allow) | Cho phép (Allow) | `200 OK` | Lọc cứng `WHERE recipient_id = current_user.id` |
+| **Xem notification người khác** (`GET /notifications`) | Từ chối (Deny) | Từ chối (Deny) | Không bao giờ trả về | Database query cô lập theo `current_user.id`, Admin không có backdoor đọc trộm thông báo user khác |
+| **Đánh dấu notification của mình đã đọc** (`PATCH /notifications/{id}/read`) | Cho phép (Allow) | Cho phép (Allow) | `200 OK` | Cập nhật `is_read = true`, `read_at = now()` (idempotent) |
+| **Đánh dấu notification người khác đã đọc** (`PATCH /notifications/{id}/read`) | Từ chối (Deny) | Từ chối (Deny) | `404 Not Found` | Bảo vệ quyền riêng tư: Trả về `404` thay vì `403` để chống tấn công dò quét UUID (Resource Enumeration) |
+| **Xem danh sách bài đăng Admin** (`GET /admin/posts`) | Từ chối (Deny) | Cho phép (Allow) | `403 Forbidden` (User) / `200 OK` (Admin) | Kiểm tra `current_user.is_admin is True` |
+| **Kiểm duyệt bài đăng** (`PATCH /admin/posts/{id}/moderation`) | Từ chối (Deny) | Cho phép (Allow) | `403 Forbidden` (User) / `200 OK` (Admin) | Kiểm tra quyền Admin + Khóa bi quan `FOR UPDATE` |
 
-## 4. API 1 – Lấy danh sách thông báo
+---
 
-`GET /api/v1/notifications`
+## 4. Đặc tả Chi tiết 4 Endpoints
 
-### 4.1. Query parameters
+### 4.1. API 1: Lấy danh sách thông báo người dùng
 
-| Tên | Kiểu | Bắt buộc | Mô tả |
-|---|---|---:|---|
-| `page` | integer | Không | Trang, mặc định `1` |
-| `limit` | integer | Không | Số phần tử/trang, mặc định `20`, tối đa đề xuất `100` |
-| `is_read` | boolean | Không | Lọc theo trạng thái đã đọc/chưa đọc; bỏ qua nếu không truyền |
+- **Endpoint:** `GET /api/v1/notifications`
+- **Tags:** `Notifications`
+- **Summary:** Lấy danh sách thông báo của người dùng
+- **Yêu cầu xác thực:** Bearer JWT Token (`get_current_active_user`).
 
-Không hỗ trợ `recipient_id` từ client. Backend bắt buộc giới hạn truy vấn theo `recipient_id = current_user.id`.
+#### Query Parameters:
+| Tên tham số | Kiểu | Bắt buộc | Mặc định | Ràng buộc | Mô tả |
+| :--- | :--- | :---: | :---: | :--- | :--- |
+| `page` | `integer` | Không | `1` | `>= 1` | Số thứ tự trang cần lấy |
+| `limit` | `integer` | Không | `20` | `1 <= limit <= 100` | Số lượng thông báo trên một trang |
+| `is_read` | `boolean` | Không | `None` | `true` hoặc `false` | Bộ lọc: `true` (chỉ thông báo đã đọc), `false` (chỉ thông báo chưa đọc), `None` (lấy tất cả) |
 
-### 4.2. Response `200 OK`
-
-Schema item dựa trên các cột đã được báo cáo trong `findback.sql`:
-
+#### Responses:
+- **`200 OK` – Thành công:**
 ```json
 {
   "items": [
     {
-      "id": 101,
+      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
       "type": "CLAIM_CREATED",
       "title": "Bạn có yêu cầu nhận đồ mới",
       "message": "Một người dùng đã gửi yêu cầu nhận đồ trong bài đăng của bạn.",
       "resource_type": "CLAIM",
-      "resource_id": "25",
+      "resource_id": "b1ffcd88-8b0a-4fe7-aa5c-5aa8ac270b22",
       "is_read": false,
       "read_at": null,
-      "created_at": "2026-11-16T10:30:00Z"
+      "created_at": "2026-11-18T10:30:00Z"
     }
   ],
   "pagination": {
@@ -112,83 +111,116 @@ Schema item dựa trên các cột đã được báo cáo trong `findback.sql`:
   }
 }
 ```
-
-Quy tắc:
-
-- Chỉ trả notification thuộc người dùng hiện tại.
-- Không trả `metadata` trong response mặc định cho đến khi schema metadata được rà soát và allowlist được nhóm duyệt.
-- Không trả bằng chứng sở hữu, token, thông tin xác thực hoặc dữ liệu riêng tư.
-- Thứ tự mặc định đề xuất: `created_at DESC, id DESC`.
-
-### 4.3. Lỗi có thể trả về
-
-- `401`: chưa xác thực hoặc token không hợp lệ.
-- `422`: query parameter sai kiểu hoặc ngoài giới hạn.
-
-## 5. API 2 – Đánh dấu thông báo đã đọc
-
-`PATCH /api/v1/notifications/{id}/read`
-
-### 5.1. Path parameter
-
-| Tên | Kiểu | Quy tắc |
-|---|---|---|
-| `id` | integer (BIGINT theo schema hiện có) | Phải là số nguyên dương |
-
-Request body: không yêu cầu body.
-
-### 5.2. Response `200 OK`
-
+- **`401 Unauthorized`:** Token thiếu, token hết hạn hoặc chữ ký không hợp lệ:
 ```json
 {
-  "id": 101,
-  "is_read": true,
-  "read_at": "2026-11-16T10:35:00Z"
+  "detail": "Chưa xác thực hoặc token không hợp lệ"
+}
+```
+- **`403 Forbidden`:** Tài khoản người dùng bị khóa hoặc không ở trạng thái hoạt động:
+```json
+{
+  "detail": "Tài khoản không ở trạng thái hoạt động: SUSPENDED"
+}
+```
+- **`422 Unprocessable Entity`:** Tham số phân trang không hợp lệ (ví dụ `limit=0` hoặc `limit=105`):
+```json
+{
+  "detail": [
+    {
+      "type": "less_than_equal",
+      "loc": ["query", "limit"],
+      "msg": "Input should be less than or equal to 100",
+      "input": 105
+    }
+  ]
 }
 ```
 
-Quy tắc:
+---
 
-- Backend lấy actor ID từ user đã xác thực.
-- Chỉ cập nhật notification khi `recipient_id = current_user.id`.
-- Gọi lặp lại phải idempotent: nếu notification đã đọc thì không làm sai trạng thái hoặc ghi nhận thời điểm đọc mới một cách không cần thiết.
-- SQL hiện có được báo cáo là có hàm `public.mark_notification_read(p_notification_id, p_actor_id)` kiểm tra quyền sở hữu và idempotency. Cách backend sử dụng hàm này hay triển khai logic tương đương phải được thống nhất với người phụ trách database; không được đồng thời thực hiện hai cơ chế cập nhật độc lập.
+### 4.2. API 2: Đánh dấu thông báo đã đọc
 
-### 5.3. Lỗi
+- **Endpoint:** `PATCH /api/v1/notifications/{id}/read`
+- **Tags:** `Notifications`
+- **Summary:** Đánh dấu thông báo đã đọc
+- **Yêu cầu xác thực:** Bearer JWT Token (`get_current_active_user`).
+- **Request Body:** Không có body.
 
-| HTTP | Trường hợp |
-|---|---|
-| `401` | Chưa xác thực |
-| `404` | Không tồn tại hoặc không thuộc người nhận hiện tại (đề xuất dùng cùng phản hồi để tránh tiết lộ tài nguyên của người khác) |
-| `422` | ID sai định dạng hoặc không hợp lệ |
+#### Path Parameters:
+| Tên tham số | Kiểu | Bắt buộc | Định dạng | Mô tả |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `UUID` | Có | RFC 4122 UUIDv4 | Định danh duy nhất của thông báo cần đánh dấu |
 
-## 6. API 3 – Danh sách bài đăng dành cho Admin
+#### Responses:
+- **`200 OK` – Thành công (Idempotent):**
+```json
+{
+  "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "is_read": true,
+  "read_at": "2026-11-18T10:35:00Z"
+}
+```
+*Lưu ý tính lũy thừa:* Nếu thông báo đã đọc từ trước, endpoint lập tức trả về `200 OK` cùng `read_at` cũ mà không thực hiện câu lệnh ghi thừa vào database.
 
-`GET /api/v1/admin/posts`
+- **`401 Unauthorized`:** Chưa đăng nhập hoặc token sai.
+- **`404 Not Found`:** Thông báo không tồn tại HOẶC thông báo thuộc người dùng khác:
+```json
+{
+  "detail": "Thông báo không tồn tại hoặc không thuộc quyền sở hữu."
+}
+```
+- **`422 Unprocessable Entity`:** `id` trên đường dẫn không đúng định dạng UUID:
+```json
+{
+  "detail": [
+    {
+      "type": "uuid_parsing",
+      "loc": ["path", "id"],
+      "msg": "Input should be a valid UUID, invalid character: found 'x' in input",
+      "input": "invalid-uuid"
+    }
+  ]
+}
+```
 
-### 6.1. Query parameters
+---
 
-| Tên | Kiểu | Bắt buộc | Mô tả |
-|---|---|---:|---|
-| `page` | integer | Không | Trang, mặc định `1` |
-| `limit` | integer | Không | Số phần tử/trang, mặc định `20` |
-| `status` | string | Không | Lọc theo trạng thái bài đăng đã được TV2 xác nhận |
-| `type` | string | Không | Lọc loại bài đăng LOST/FOUND nếu đúng với model TV2 |
-| `q` | string | Không | Từ khóa tìm kiếm; trường tìm kiếm và cách chuẩn hóa cần TV2 xác nhận |
+### 4.3. API 3: Danh sách bài đăng dành cho Quản trị viên (Admin)
 
-Các trạng thái được thấy trong SQL/tài liệu hiện tại gồm `DRAFT`, `ACTIVE`, `HIDDEN`, `CLOSED`; cần xác nhận enum/model thực tế với TV2 trước khi khóa schema. Không tự suy ra thêm trạng thái.
+- **Endpoint:** `GET /api/v1/admin/posts`
+- **Tags:** `Admin Posts`
+- **Summary:** Lấy danh sách bài đăng dành cho Quản trị viên (Admin)
+- **Yêu cầu xác thực:** Bearer JWT Token với quyền Admin (`get_current_admin_user`).
 
-### 6.2. Response `200 OK` – ví dụ minh họa
+#### Query Parameters:
+| Tên tham số | Kiểu | Bắt buộc | Mặc định | Mô tả |
+| :--- | :--- | :---: | :---: | :--- |
+| `page` | `integer` | Không | `1` | Số trang (`>= 1`) |
+| `limit` | `integer` | Không | `20` | Số lượng phần tử mỗi trang (`1 <= limit <= 100`) |
+| `status` | `string` | Không | `None` | Lọc trạng thái: `DRAFT`, `ACTIVE`, `HIDDEN`, `CLOSED` |
+| `type` | `string` | Không | `None` | Lọc loại tin: `LOST`, `FOUND` |
+| `q` | `string` | Không | `None` | Từ khóa tìm kiếm theo tiêu đề, mô tả hoặc địa điểm |
 
+#### Responses:
+- **`200 OK` – Thành công:**
 ```json
 {
   "items": [
     {
-      "id": 25,
-      "title": "Mất ví màu đen",
-      "type": "LOST",
+      "id": "c2a11b00-3d2e-4b68-98e1-51829e01347a",
+      "title": "Nhặt được ví da màu đen tại Tòa FPT",
+      "description": "Nhặt được chiếc ví tại phòng Lab 204 lúc 15h ngày 18/11/2026.",
+      "type": "FOUND",
       "status": "ACTIVE",
-      "created_at": "2026-11-16T09:00:00Z"
+      "user_id": "d3b22c11-4e3f-4c79-a9f2-6293af12458b",
+      "location": "Tòa nhà FPT, Khu Công nghệ cao",
+      "area": "Quận 9, TP. Thủ Đức",
+      "moderated_by": null,
+      "moderated_at": null,
+      "moderation_reason": null,
+      "created_at": "2026-11-18T08:00:00Z",
+      "updated_at": "2026-11-18T08:30:00Z"
     }
   ],
   "pagination": {
@@ -199,128 +231,93 @@ Các trạng thái được thấy trong SQL/tài liệu hiện tại gồm `DRA
   }
 }
 ```
-
-Đây là response minh họa, không phải schema Post đã được xác nhận. TV2 cần cung cấp danh sách field được phép trả về, kiểu dữ liệu, trạng thái, enum loại tin và quy tắc lọc. Không trả thông tin bằng chứng riêng tư hoặc dữ liệu nhạy cảm.
-
-### 6.3. Phân quyền và lỗi
-
-- Chưa đăng nhập: `401`.
-- Đã đăng nhập nhưng không có role admin: `403`.
-- Query sai kiểu/không hợp lệ: `422`.
-
-## 7. API 4 – Kiểm duyệt bài đăng
-
-`PATCH /api/v1/admin/posts/{id}/moderation`
-
-### 7.1. Path parameter và request body
-
-`id`: ID bài đăng, số nguyên dương theo kiểu ID mà TV2 xác nhận.
-
-Request body đề xuất cho phạm vi hiện được SQL hỗ trợ:
-
+- **`401 Unauthorized`:** Token không hợp lệ hoặc thiếu token.
+- **`403 Forbidden`:** Người dùng không có vai trò Quản trị viên (`is_admin is False`):
 ```json
 {
-  "action": "HIDE",
-  "reason": "Tin đăng có nội dung vi phạm quy định."
+  "detail": "Chức năng chỉ dành cho quản trị viên (Admin)"
 }
 ```
-
-- `action`: hiện chỉ đề xuất giá trị `HIDE`.
-- `reason`: bắt buộc, sau khi trim không được rỗng; giới hạn độ dài cần thống nhất với TV2/database.
-- Không tự thêm `APPROVE`, `RESTORE`, `UNHIDE` hoặc hành động khác vì SQL được kiểm tra hiện chỉ mô tả thao tác ẩn tin.
-
-### 7.2. Response `200 OK` – ví dụ minh họa
-
-```json
-{
-  "id": 25,
-  "status": "HIDDEN",
-  "moderated_by": 1,
-  "moderation_reason": "Tin đăng có nội dung vi phạm quy định.",
-  "moderated_at": "2026-11-16T11:00:00Z"
-}
-```
-
-Tên field và response cuối cùng cần khớp model/response schema của TV2.
-
-### 7.3. Quy tắc nghiệp vụ
-
-Theo báo cáo kiểm tra SQL hiện có:
-
-- `public.moderate_post(p_post_id, p_actor_id, p_reason)` kiểm tra quyền admin.
-- Lý do kiểm duyệt là bắt buộc.
-- Không cho ẩn bài có trạng thái `CLOSED`.
-- Hành động ẩn chuyển trạng thái sang `HIDDEN` và lưu thông tin người kiểm duyệt, thời điểm, lý do.
-
-Cần xác nhận với TV2 và nhóm database xem backend gọi hàm SQL này hay gọi service/repository Posts dùng chung. Không tạo logic cập nhật trạng thái song song, gây lệch dữ liệu.
-
-### 7.4. Lỗi
-
-| HTTP | Trường hợp |
-|---|---|
-| `400` | Hành động không hợp lệ hoặc không thể chuyển trạng thái theo quy tắc nghiệp vụ |
-| `401` | Chưa đăng nhập |
-| `403` | Không có role admin |
-| `404` | Không tìm thấy bài đăng |
-| `422` | Body/path sai định dạng hoặc thiếu `reason` |
-
-Việc dùng `400` hay `409` cho xung đột trạng thái là điểm cần thống nhất với quy ước lỗi chung của dự án; Jira yêu cầu có mã lỗi cho hành động không hợp lệ nhưng chưa chốt chính xác status code.
-
-## 8. Định dạng lỗi chung
-
-Định dạng lỗi toàn dự án chưa được xác nhận. Hai phương án cần chọn thống nhất:
-
-**Phương án A – FastAPI mặc định/tối giản:**
-
-```json
-{
-  "detail": "Not authenticated"
-}
-```
-
-**Phương án B – envelope có mã lỗi:**
-
-```json
-{
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "Bạn không có quyền thực hiện hành động này."
-  }
-}
-```
-
-**PENDING CONFIRMATION:** chọn một format chung với TV1 và nhóm tích hợp; không tự triển khai mỗi module một kiểu.
-
-## 9. Audit logging
-
-Các hành động moderation cần ghi nhận tối thiểu:
-
-- Actor/user thực hiện.
-- Action (ví dụ `POST_HIDDEN`).
-- Resource type và resource ID.
-- Thời điểm thực hiện.
-- Kết quả và thông tin lý do theo chính sách audit log của nhóm.
-
-TV5 phối hợp cấu trúc/vị trí audit log; service nghiệp vụ phát sinh hành động chịu trách nhiệm phát log theo kiến trúc dự án. Không ghi token, password, bằng chứng sở hữu hoặc payload nhạy cảm vào log.
-
-## 10. Các xác nhận bắt buộc trước triển khai
-
-| Chủ thể | Cần xác nhận |
-|---|---|
-| TV1 – Identity | Dependency user hiện tại; enum/format role và status; lỗi 401/403 chung |
-| TV2 – Posts | Model Post; field response; enum type/status; bộ lọc `q`; service/hàm moderation; giới hạn reason; quy tắc audit |
-| TV4 – Claims/Returns | Sự kiện nghiệp vụ và recipient; event nào đã được DB trigger tạo notification |
-| Nhóm tích hợp/database | API prefix; error envelope; nguồn schema chuẩn; chiến lược trigger so với application service; migration baseline |
-
-## 11. Ngoài phạm vi KAN-30
-
-- Không triển khai code router/service/model.
-- Không tạo hoặc chạy SQL.
-- Không tạo Alembic migration.
-- Không thêm endpoint mới.
-- Không thay đổi schema Posts/Users/Claims.
-- Không commit hoặc push Git.
+- **`422 Unprocessable Entity`:** Lỗi tham số phân trang.
 
 ---
 
-**Trạng thái:** Draft chờ xác nhận liên module. Tài liệu này là đầu ra đặc tả KAN-30, không phải bằng chứng endpoint đã hoạt động.
+### 4.4. API 4: Kiểm duyệt bài đăng (Admin Moderation)
+
+- **Endpoint:** `PATCH /api/v1/admin/posts/{id}/moderation`
+- **Tags:** `Admin Posts`
+- **Summary:** Kiểm duyệt bài đăng (Admin)
+- **Yêu cầu xác thực:** Bearer JWT Token với quyền Admin (`get_current_admin_user`).
+
+#### Path Parameters:
+| Tên tham số | Kiểu | Bắt buộc | Định dạng | Mô tả |
+| :--- | :--- | :---: | :--- | :--- |
+| `id` | `UUID` | Có | RFC 4122 UUIDv4 | Định danh duy nhất của bài đăng cần kiểm duyệt |
+
+#### Request Body (`application/json`):
+| Thuộc tính | Kiểu | Bắt buộc | Giá trị cho phép | Ràng buộc / Mô tả |
+| :--- | :--- | :---: | :--- | :--- |
+| `action` | `string` | Có | `"HIDE"` | Hành động kiểm duyệt (hiện chỉ hỗ trợ `"HIDE"`) |
+| `reason` | `string` | Có | Chuỗi ký tự | Bắt buộc; không được để trống hoặc chỉ có khoảng trắng; độ dài `1 <= length <= 500` sau khi trim |
+
+*Ví dụ Request Body:*
+```json
+{
+  "action": "HIDE",
+  "reason": "Tin đăng có nội dung vi phạm điều khoản cộng đồng."
+}
+```
+
+#### Responses:
+- **`200 OK` – Kiểm duyệt thành công:**
+```json
+{
+  "id": "c2a11b00-3d2e-4b68-98e1-51829e01347a",
+  "status": "HIDDEN",
+  "moderated_by": "e4c33d22-5f4a-4d8a-ba03-73a4b023569c",
+  "moderation_reason": "Tin đăng có nội dung vi phạm điều khoản cộng đồng.",
+  "moderated_at": "2026-11-18T10:15:00Z"
+}
+```
+
+- **`400 Bad Request`:**
+  - Bài viết đã đóng (`CLOSED`): Không thể kiểm duyệt bài viết đã hoàn tất chu trình.
+    ```json
+    {
+      "detail": "Không thể kiểm duyệt bài đăng đã đóng (CLOSED)."
+    }
+    ```
+  - Hành động không được hỗ trợ (khác `"HIDE"`):
+    ```json
+    {
+      "detail": "Hành động kiểm duyệt không hợp lệ: APPROVE. Chỉ hỗ trợ hành động HIDE."
+    }
+    ```
+
+- **`401 Unauthorized`:** Chưa xác thực.
+- **`403 Forbidden`:** Người gọi không phải là Admin.
+- **`404 Not Found`:** Bài đăng không tồn tại trong hệ thống:
+  ```json
+  {
+    "detail": "Không tìm thấy bài đăng với ID: c2a11b00-3d2e-4b68-98e1-51829e01347a"
+  }
+  ```
+- **`422 Unprocessable Entity`:** Lý do kiểm duyệt rỗng hoặc chỉ toàn khoảng trắng:
+  ```json
+  {
+    "detail": "Lý do kiểm duyệt không được để trống."
+  }
+  ```
+
+---
+
+## 5. Quy tắc Tính nguyên tử và Giao dịch (Transaction Integrity)
+
+Trong `PATCH /api/v1/admin/posts/{id}/moderation`, quy trình kiểm duyệt diễn ra với các đảm bảo kỹ thuật:
+1. **Pessimistic Locking (`SELECT ... FOR UPDATE`):** Khóa dòng bài viết tại thời điểm đọc, ngăn ngừa xung đột dữ liệu khi 2 admin cùng thao tác.
+2. **Transaction Atomicity:** Ba thao tác nghiệp vụ được thực hiện trong cùng một session database:
+   - Cập nhật trạng thái Post thành `HIDDEN`, gán `moderated_by` và `moderated_at`.
+   - Ghi nhật ký kiểm toán vào bảng `audit_logs` (`action="HIDE"`, `actor_id=admin.id`).
+   - Tạo thông báo `POST_HIDDEN` cho chủ bài đăng (`auto_commit=False`).
+   - Gọi `await session.commit()` duy nhất một lần. Nếu bất kỳ bước nào xảy ra lỗi, toàn bộ thao tác được rollback tự động.
+3. **Tính lũy thừa (Idempotency):** Nếu bài viết đã ở trạng thái `HIDDEN`, hệ thống trả về ngay kết quả hiện tại mà không tạo bản ghi audit log trùng hay gửi lặp lại thông báo cho người dùng.
