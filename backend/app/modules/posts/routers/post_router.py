@@ -67,19 +67,28 @@ def upload_post_image(
     db: DatabaseSession,
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
+    restore_image_id: Annotated[
+        UUID | None, Query(description="Restore an unavailable image at its existing URL")
+    ] = None,
 ) -> PostImageUploadResponse:
-    return upload_image(db, id, file, user.id, request.app.state.settings.media_root)
+    return upload_image(
+        db, id, file, user.id, request.app.state.settings.media_root, restore_image_id
+    )
 
 
 @router.get("/posts/{id}/images/{image_id}", response_class=FileResponse)
-def download_post_image(id: UUID, image_id: UUID, request: Request, db: DatabaseSession):
+def download_post_image(
+    id: UUID, image_id: UUID, request: Request, db: DatabaseSession
+) -> Response:
     post = PostRepository(db).get_visible(id)
     image = db.get(PostImage, image_id) if post is not None else None
     if image is None or image.post_id != id:
         raise DomainError(404, "IMAGE_NOT_FOUND", "Post image not found")
+    headers = {"X-Content-Type-Options": "nosniff"}
+    data = image.image_data
+    if data is not None:
+        return Response(data, media_type=image.mime_type, headers=headers)
     path = image_path(request.app.state.settings.media_root, image)
     if not path.is_file():
         raise DomainError(404, "IMAGE_NOT_FOUND", "Post image not found")
-    return FileResponse(
-        path, media_type=image.mime_type, headers={"X-Content-Type-Options": "nosniff"}
-    )
+    return FileResponse(path, media_type=image.mime_type, headers=headers)

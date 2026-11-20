@@ -21,7 +21,7 @@ uv run --locked python -m app.grant_admin admin@example.com
 
 Migration `0003_integrated_system` nâng cấp schema UUID của nhánh Claims, giữ các ID và dữ liệu hiện có, thêm danh mục mẫu và tạo thông báo cho các sự kiện Claims đã có. Các bảng có ID số từ bản chạy riêng của Identity và Posts cần kế hoạch nhập dữ liệu riêng. Có thể cấu hình schema PostgreSQL qua `DATABASE_SCHEMA` (mặc định `findback_api`).
 
-API lưu ảnh trong `backend/uploads` hoặc thư mục do `MEDIA_ROOT` chỉ định. Khi sao lưu, giữ cả DB và thư mục ảnh. `CORS_ORIGINS` là danh sách origin ngăn cách bằng dấu phẩy.
+Migration `0004_post_image_data` lưu ảnh bài đăng mới trong DB. Ảnh bài đăng tải lên trước migration và ảnh bằng chứng vẫn được đọc từ `backend/uploads` hoặc thư mục `MEDIA_ROOT`. Khi sao lưu, giữ cả DB và thư mục này. Nếu tệp ảnh bài đăng cũ đã mất, chủ tin đang mở có thể gửi lại ảnh qua `POST /api/v1/posts/{id}/images?restore_image_id={image_id}` để giữ nguyên đường dẫn và thứ tự ảnh. `CORS_ORIGINS` là danh sách origin ngăn cách bằng dấu phẩy.
 
 ## Kiểm thử
 

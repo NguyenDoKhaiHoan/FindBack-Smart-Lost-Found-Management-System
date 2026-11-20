@@ -1,7 +1,17 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Numeric, String, Text, Uuid
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base, UTCDateTime, utcnow
@@ -84,6 +94,7 @@ class PostImage(Base):
     size_bytes: Mapped[int] = mapped_column(Integer)
     sort_order: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
 
     @property
     def file_path(self) -> str:

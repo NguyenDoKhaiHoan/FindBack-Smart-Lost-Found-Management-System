@@ -7,6 +7,8 @@ from PIL import Image
 from sqlalchemy import func, select
 
 from app.modules.notifications_admin.models.report import ModerationAudit
+from app.modules.posts.models.post import PostImage
+from app.modules.posts.services.image_service import image_path
 
 API = "/api/v1"
 
@@ -26,9 +28,9 @@ def payload(response, status=200):
     return response.json()
 
 
-def image_bytes() -> bytes:
+def image_bytes(color="blue") -> bytes:
     target = BytesIO()
-    Image.new("RGB", (8, 8), color="blue").save(target, format="PNG")
+    Image.new("RGB", (8, 8), color=color).save(target, format="PNG")
     return target.getvalue()
 
 
@@ -128,7 +130,12 @@ def test_posts_search_matching_and_images_use_the_same_visibility(world):
         ),
         201,
     )["image"]
-    assert client.get(image["file_path"]).headers["content-type"] == "image/png"
+    assert not world.settings.media_root.exists()
+    downloaded = client.get(image["file_path"])
+    assert downloaded.status_code == 200
+    assert downloaded.headers["content-type"] == "image/png"
+    with Image.open(BytesIO(downloaded.content)) as photo:
+        assert photo.size == (8, 8)
     assert (
         client.post(
             f"{found_url}/images",
@@ -172,6 +179,50 @@ def test_posts_search_matching_and_images_use_the_same_visibility(world):
     assert payload(client.get(f"{API}/matches", params=params))["items"] == []
     assert client.get(f"{API}/matches/{match['id']}").status_code == 404
     assert client.delete(f"{API}/posts/{lost['id']}", headers=world.auth()).status_code == 204
+
+
+def test_existing_post_image_url_reads_legacy_upload(world):
+    data = image_bytes()
+    with world.factory() as db:
+        record = PostImage(
+            post_id=world.ids["found"],
+            original_name="legacy.png",
+            mime_type="image/png",
+            size_bytes=len(data),
+            sort_order=0,
+        )
+        db.add(record)
+        db.commit()
+        url = record.file_path
+        path = image_path(world.settings.media_root, record)
+    assert payload(world.client.get(url), 404)["error"]["code"] == "IMAGE_NOT_FOUND"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(data)
+    response = world.client.get(url)
+    assert response.status_code == 200
+    assert response.content == data
+    upload_url = f"{API}/posts/{world.ids['found']}/images?restore_image_id={record.id}"
+    file = {"file": ("legacy.png", data, "image/png")}
+    assert world.client.post(upload_url, headers=world.auth("owner"), files=file).status_code == 409
+    path.unlink()
+    assert world.client.post(upload_url, headers=world.auth(), files=file).status_code == 403
+
+    for _ in range(2):
+        restored = payload(
+            world.client.post(upload_url, headers=world.auth("owner"), files=file), 201
+        )["image"]
+        assert restored["file_path"] == url
+        assert restored["sort_order"] == 0
+    assert len(payload(world.client.get(f"{API}/posts/{world.ids['found']}"))["images"]) == 1
+    response = world.client.get(url)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert not path.exists()
+    assert world.client.post(
+        upload_url,
+        headers=world.auth("owner"),
+        files={"file": ("legacy.png", image_bytes("red"), "image/png")},
+    ).status_code == 409
 
 
 def test_claim_handover_private_evidence_and_notifications(world):

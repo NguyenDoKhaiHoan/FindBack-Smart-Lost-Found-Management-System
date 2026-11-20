@@ -47,35 +47,39 @@ def clean_image(data: bytes, content_type: str | None) -> tuple[bytes, str]:
 
 
 def upload_image(
-    db: Session, post_id: UUID, file: UploadFile, owner_id: UUID, media_root: Path
+    db: Session,
+    post_id: UUID,
+    file: UploadFile,
+    owner_id: UUID,
+    media_root: Path,
+    restore_image_id: UUID | None,
 ) -> PostImageUploadResponse:
     lock_editable_post(db, post_id, owner_id, check_claims=False)
-    count = db.scalar(select(func.count()).where(PostImage.post_id == post_id))
-    if count >= MAX_IMAGES:
-        raise DomainError(409, "IMAGE_LIMIT", "A post can have at most 5 images")
+    if restore_image_id is None:
+        count = db.scalar(select(func.count()).where(PostImage.post_id == post_id))
+        if count >= MAX_IMAGES:
+            raise DomainError(409, "IMAGE_LIMIT", "A post can have at most 5 images")
+        record = PostImage(post_id=post_id, sort_order=count)
+    else:
+        record = db.get(PostImage, restore_image_id)
+        if record is None or record.post_id != post_id:
+            raise DomainError(404, "IMAGE_NOT_FOUND", "Post image not found")
+
     data, mime = clean_image(file.file.read(MAX_IMAGE_BYTES + 1), file.content_type)
-    name = Path((file.filename or "image").replace(chr(92), "/")).name[:255] or "image"
-    record = PostImage(
-        post_id=post_id,
-        original_name=name,
-        mime_type=mime,
-        size_bytes=len(data),
-        sort_order=count,
-    )
-    db.add(record)
+    if restore_image_id is not None:
+        if record.image_data == data:
+            return PostImageUploadResponse(image=record)
+        if record.image_data is not None or image_path(media_root, record).is_file():
+            raise DomainError(409, "IMAGE_ALREADY_AVAILABLE", "Post image is already available")
+
+    name = Path((file.filename or "image").replace(chr(92), "/")).name
+    record.original_name = name[:255] or "image"
+    record.mime_type = mime
+    record.size_bytes = len(data)
+    record.image_data = data
+    if restore_image_id is None:
+        db.add(record)
     db.flush()
     response = PostImageUploadResponse(image=record)
-    path = image_path(media_root, record)
-    created = False
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("xb") as stream:
-            created = True
-            stream.write(data)
-        db.commit()
-    except Exception:
-        db.rollback()
-        if created:
-            path.unlink(missing_ok=True)
-        raise
+    db.commit()
     return response
