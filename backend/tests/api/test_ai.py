@@ -11,6 +11,7 @@ from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.modules.ai import images, matching
+from app.modules.ai.image_mobilenet import classify
 from app.modules.ai.runtime import AIRuntime
 from app.modules.posts.models.post import Category, Post, PostImage
 from app.modules.posts.services.image_service import MAX_IMAGE_BYTES, image_path
@@ -50,6 +51,21 @@ def png(color="black"):
     output = BytesIO()
     Image.new("RGB", (12, 12), color).save(output, "PNG")
     return ("image.png", output.getvalue(), "image/png")
+
+
+def test_mobilenet_classify_does_not_guess_from_weak_or_tied_scores():
+    weak = [0.0] * 1000
+    weak[893] = 0.24
+    assert classify(weak) is None
+
+    tied = [0.0] * 1000
+    tied[487] = 0.25
+    tied[893] = 0.25
+    assert classify(tied) is None
+
+    wallet = [0.0] * 1000
+    wallet[893] = 1.0
+    assert classify(wallet) == "wallet"
 
 
 def mock_openai(world, handler):

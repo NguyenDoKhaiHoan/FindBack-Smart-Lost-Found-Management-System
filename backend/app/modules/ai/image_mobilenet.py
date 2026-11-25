@@ -61,12 +61,14 @@ class MobileImageEncoder:
 
 
 def classify(vector: list[float]) -> str | None:
+    if len(vector) < CLASS_COUNT:
+        return None
     ranked = sorted(
         ((sum(vector[index] for index in indices), label) for label, indices in CLASSES.items()),
         reverse=True,
     )
     (confidence, kind), (next_confidence, _) = ranked[:2]
-    return kind if confidence >= 0.18 and confidence - next_confidence >= 0.08 else None
+    return kind if confidence >= 0.25 and confidence - next_confidence >= 0.12 else None
 
 
 def likeness(first: list[float], second: list[float]) -> float:
