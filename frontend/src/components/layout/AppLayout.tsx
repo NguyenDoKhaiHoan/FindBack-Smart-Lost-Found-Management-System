@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ArrowUpRight, Bell, Menu, Plus, X } from 'lucide-react'
 import { Brand } from '../ui/shared'
 import { useSession } from '../../features/auth/session'
+import { ChatWidget } from '../../features/ai/ChatWidget'
 
 export function AppLayout() {
   const [open, setOpen] = useState(false)
@@ -136,6 +137,7 @@ export function AppLayout() {
           <span>Được tạo nên từ sự sẻ chia.</span>
         </div>
       </footer>
+      <ChatWidget />
     </>
   )
 }

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     jwt_audience: str = "findback-api"
     media_root: Path = BACKEND_DIR / "uploads"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    openai_api_key: SecretStr | None = None
+    openai_chat_model: str = ""
+    openai_vision_model: str = ""
+    openai_timeout_seconds: float = Field(default=30, ge=1, le=60)
+    ai_matching_enabled: bool = True
+    ai_image_search_enabled: bool = True
+    ai_auto_post_enabled: bool = True
+    ai_chatbot_enabled: bool = True
+    ai_cpu_threads: int = Field(default=2, ge=1, le=8)
+    ai_text_index_batch: int = Field(default=32, ge=4, le=128)
+    ai_image_index_batch: int = Field(default=12, ge=1, le=64)
+    ai_requests_per_minute: int = Field(default=12, ge=1, le=120)
+    ai_global_requests_per_minute: int = Field(default=40, ge=1, le=240)
 
     @field_validator("jwt_secret_key")
     @classmethod

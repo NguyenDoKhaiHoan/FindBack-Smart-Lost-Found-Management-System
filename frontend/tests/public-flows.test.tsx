@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -29,6 +29,7 @@ const user = {
 }
 const request = vi.fn()
 let cache: QueryClient
+let postImages: { id: string; file_path: string }[]
 
 function setup(path: string) {
   cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -46,6 +47,7 @@ function setup(path: string) {
 
 beforeEach(() => {
   clearSession()
+  postImages = []
   request.mockReset()
   request.mockImplementation(async (path: string) => {
     if (path === '/api/v1/categories') return Response.json([category])
@@ -55,7 +57,7 @@ beforeEach(() => {
       return Response.json({
         ...item,
         location: item.location.name,
-        images: [],
+        images: postImages,
         user_id: actorId,
         description: 'Mô tả công khai của tin',
       })
@@ -82,7 +84,9 @@ describe('live public and protected screens', () => {
     await ui.selectOptions(screen.getByRole('combobox', { name: 'Khu vực' }), 'VN-HN')
     await ui.selectOptions(screen.getByRole('combobox', { name: 'Loại tin' }), 'found')
     await waitFor(() => {
-      const searchRequests = request.mock.calls.filter(([path]) => path.startsWith('/api/v1/search?'))
+      const searchRequests = request.mock.calls.filter(([path]) =>
+        path.startsWith('/api/v1/search?'),
+      )
       const [url] = searchRequests.at(-1) ?? []
       expect(url).toContain(`category_id=${category.id}`)
       expect(url).toContain('location_code=VN-HN')
@@ -103,6 +107,25 @@ describe('live public and protected screens', () => {
       await screen.findByRole('heading', { name: 'Chưa tìm thấy món đồ phù hợp' }),
     ).toBeVisible()
     expect(screen.queryByRole('link', { name: /Ví xanh/ })).not.toBeInTheDocument()
+  })
+
+  it('shows an available cover when the first image fails to load', async () => {
+    postImages = ['old', 'new'].map((id) => ({
+      id,
+      file_path: `/api/v1/posts/${postId}/images/${id}`,
+    }))
+    const ui = setup('/kham-pha')
+    const card = await screen.findByRole('link', { name: /Ví xanh/ })
+    await waitFor(() =>
+      expect(card.querySelector('img')).toHaveAttribute('src', postImages[0].file_path),
+    )
+    fireEvent.error(card.querySelector('img')!)
+    expect(card.querySelector('img')).toHaveAttribute('src', postImages[1].file_path)
+
+    await ui.click(card)
+    fireEvent.error(await screen.findByRole('img', { name: 'Ảnh 1 của Ví xanh' }))
+    expect(screen.getByText('Không tải được ảnh')).toBeVisible()
+    expect(screen.getByRole('img', { name: 'Ảnh 2 của Ví xanh' })).toBeVisible()
   })
 
   it('redirects a guest from claiming a found post to sign-in', async () => {

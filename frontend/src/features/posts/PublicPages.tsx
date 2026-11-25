@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowUpRight, Box, MapPin } from 'lucide-react'
@@ -21,6 +21,9 @@ import {
   type PostType,
 } from '../../lib/api/system'
 import { useSession } from '../auth/session'
+import { ImageSearch, SuggestedMatches } from '../ai/AISearch'
+import { PostDraftAssistant } from '../ai/PostDraftAssistant'
+import type { Draft } from '../ai/api'
 import { PostCard } from './PostCard'
 
 const locations = [
@@ -102,6 +105,7 @@ export function ExplorePage() {
         }
       />
       <SearchBar key={keyword} initial={keyword} onSearch={(value) => update('q', value.trim())} />
+      <ImageSearch type={type} category={category} postImage={params.get('anh')} />
       <div className="explore-grid live-split">
         <aside className="panel filter-panel">
           <h2>Bộ lọc</h2>
@@ -250,11 +254,10 @@ export function ItemDetailPage() {
           {post.images.length ? (
             <div className="post-photos">
               {post.images.map((image, index) => (
-                <img
+                <DetailPhoto
                   key={image.id}
                   src={apiAssetUrl(image.file_path)}
                   alt={`Ảnh ${index + 1} của ${post.title ?? 'món đồ'}`}
-                  loading="lazy"
                 />
               ))}
             </div>
@@ -272,6 +275,11 @@ export function ItemDetailPage() {
             </p>
           )}
           <p>{formatDate(post.event_time)}</p>
+          {post.status === 'OPEN' && post.images.length > 0 && (
+            <Link className="text-link" to={`/kham-pha?anh=${post.images[0].id}`}>
+              Tìm đồ có ảnh tương tự
+            </Link>
+          )}
           {author.data?.full_name && <p>Người đăng: {author.data.full_name}</p>}
         </article>
         <aside className="panel live-stack">
@@ -306,7 +314,20 @@ export function ItemDetailPage() {
           <SafetyNote />
         </aside>
       </div>
+      {post.status === 'OPEN' && <SuggestedMatches id={post.id} />}
     </div>
+  )
+}
+
+function DetailPhoto({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
+  return failed ? (
+    <div className="post-photo-empty">
+      <Box size={48} aria-hidden="true" />
+      <span>Không tải được ảnh</span>
+    </div>
+  ) : (
+    <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />
   )
 }
 
@@ -394,7 +415,9 @@ function PostEditor({
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const editor = useRef<HTMLFormElement>(null)
   const [files, setFiles] = useState<File[]>([])
+  const [fileSelection, setFileSelection] = useState(0)
   const [savedId, setSavedId] = useState<string | null>(null)
   const [fileError, setFileError] = useState('')
   const limit = 5 - (post?.images.length ?? 0)
@@ -421,6 +444,20 @@ function PostEditor({
     },
     onSuccess: (id) => navigate(`/do-vat/${id}`, { replace: true }),
   })
+  function applyDraft(draft: Draft) {
+    const values = {
+      title: draft.title.trim(),
+      description: draft.description.trim(),
+      category_id: draft.category_id,
+      color_code: draft.color,
+    }
+    for (const [name, value] of Object.entries(values)) {
+      const field = editor.current?.elements.namedItem(name)
+      if (value && (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) {
+        field.value = value
+      }
+    }
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (save.isPending || fileError) return
@@ -440,7 +477,7 @@ function PostEditor({
     save.mutate({ body, type: value('type') === 'FOUND' ? 'FOUND' : 'LOST' })
   }
   return (
-    <form className="panel live-stack" onSubmit={submit}>
+    <form className="panel live-stack" onSubmit={submit} ref={editor}>
       <fieldset className="live-fields" disabled={save.isPending || Boolean(savedId)}>
         {!post && (
           <label className="field">
@@ -533,6 +570,7 @@ function PostEditor({
                 selected.length > limit ||
                 selected.some((file) => !imageTypes.includes(file.type) || file.size > maxImageSize)
               setFiles(invalid ? [] : selected)
+              setFileSelection((previous) => previous + 1)
               setFileError(
                 invalid
                   ? `Chọn tối đa ${limit} ảnh JPEG, PNG hoặc WebP, mỗi ảnh tối đa 5 MiB.`
@@ -541,6 +579,16 @@ function PostEditor({
             }}
           />
         </label>
+      )}
+      {!post && !savedId && files[0] && (
+        <PostDraftAssistant
+          key={fileSelection}
+          file={files[0]}
+          categories={categories}
+          colors={colors}
+          disabled={save.isPending}
+          apply={applyDraft}
+        />
       )}
       {savedId && !save.isPending && (
         <p role="status">

@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     ForeignKey,
@@ -60,6 +61,8 @@ class Post(Base):
     latitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
     longitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
     search_text: Mapped[str | None] = mapped_column(Text)
+    ai_embedding_key: Mapped[str | None] = mapped_column(String(64), deferred=True)
+    ai_embedding: Mapped[list[float] | None] = mapped_column(JSON, deferred=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     moderated_by: Mapped[UUID | None] = mapped_column(ForeignKey("findback_api.users.id"))
@@ -95,6 +98,8 @@ class PostImage(Base):
     sort_order: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    ai_embedding_key: Mapped[str | None] = mapped_column(String(64), deferred=True)
+    ai_embedding: Mapped[list[float] | None] = mapped_column(JSON, deferred=True)
 
     @property
     def file_path(self) -> str:

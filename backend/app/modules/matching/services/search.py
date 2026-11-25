@@ -73,7 +73,13 @@ def ordering(model, sort: SearchSort):
     return model.event_time.asc(), model.id.asc()
 
 
-def search_posts(db: Session, query: SearchQuery) -> SearchResponse:
+def search_posts(
+    db: Session,
+    query: SearchQuery,
+    *,
+    location_text: str | None = None,
+    only_claimable: bool = False,
+) -> SearchResponse:
     if query.category_id is not None and db.get(Category, query.category_id) is None:
         raise DomainError(
             422,
@@ -115,6 +121,10 @@ def search_posts(db: Session, query: SearchQuery) -> SearchResponse:
         filtered = filtered.where(Post.event_time < query.event_to.astimezone(timezone.utc))
     for word in tokens(query.q or ""):
         filtered = filtered.where(Post.search_text.contains(f" {word} ", autoescape=True))
+    if location_text:
+        filtered = filtered.where(Post.location.icontains(location_text, autoescape=True))
+    if only_claimable:
+        filtered = filtered.where(Post.completed_claim_id.is_(None))
 
     total_query = select(func.count().label("total")).select_from(filtered.subquery()).subquery()
     page_query = (

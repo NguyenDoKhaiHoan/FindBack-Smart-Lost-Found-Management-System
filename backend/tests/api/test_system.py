@@ -16,7 +16,22 @@ API = "/api/v1"
 def test_integrated_openapi_lists_all_business_operations(world):
     spec = payload(world.client.get("/openapi.json"))
     validate(spec)
-    assert sum(len(operations) for operations in spec["paths"].values()) == 39
+    assert (
+        sum(len(operations) for path, operations in spec["paths"].items() if path.startswith(API))
+        == 39
+    )
+    assert {
+        (path, method)
+        for path, operations in spec["paths"].items()
+        if path.startswith("/api/ai/")
+        for method in operations
+    } == {
+        ("/api/ai/matches/{item_id}", "get"),
+        ("/api/ai/image-search", "post"),
+        ("/api/ai/chat/image-search", "post"),
+        ("/api/ai/generate-post", "post"),
+        ("/api/ai/chat", "post"),
+    }
     assert f"{API}/auth/refresh" in spec["paths"]
     assert f"{API}/returns/{{id}}/handover" in spec["paths"]
     assert f"{API}/admin/statistics" in spec["paths"]
@@ -218,11 +233,14 @@ def test_existing_post_image_url_reads_legacy_upload(world):
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert not path.exists()
-    assert world.client.post(
-        upload_url,
-        headers=world.auth("owner"),
-        files={"file": ("legacy.png", image_bytes("red"), "image/png")},
-    ).status_code == 409
+    assert (
+        world.client.post(
+            upload_url,
+            headers=world.auth("owner"),
+            files={"file": ("legacy.png", image_bytes("red"), "image/png")},
+        ).status_code
+        == 409
+    )
 
 
 def test_claim_handover_private_evidence_and_notifications(world):

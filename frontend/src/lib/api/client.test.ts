@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { claimsApi, ApiError } from './index'
 import { clearSession, getSessionSnapshot, setSession } from './session-store'
 import { apiRequest } from './client'
+import { identityApi } from './system'
 
 const actorId = '8ea5ac28-20b6-4c1d-8da7-fb639db74cd2'
 const claimId = '89c06c70-275c-4bc1-9e28-928db7cd58c2'
@@ -22,6 +23,27 @@ afterEach(() => {
   clearSession()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+})
+
+it('bounds a stalled login and reports a timeout the form can display', async () => {
+  const timeout = new AbortController()
+  vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (_url: string, { signal }: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
+        }),
+    ),
+  )
+  const pending = identityApi.login(
+    { email: 'demo@example.com', password: 'test-only' },
+    new AbortController().signal,
+  )
+  timeout.abort(new DOMException('Request timed out', 'TimeoutError'))
+  await expect(pending).rejects.toMatchObject({ code: 'REQUEST_TIMEOUT' })
+  expect(getSessionSnapshot().token).toBeNull()
 })
 
 describe('claims contract boundary', () => {

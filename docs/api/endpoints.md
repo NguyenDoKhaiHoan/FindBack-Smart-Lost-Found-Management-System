@@ -13,6 +13,8 @@ FastAPI công bố contract của phiên bản chạy tại `/openapi.json` và 
 
 `GET /api/v1/health` kiểm tra kết nối DB và trả `503` khi mất kết nối.
 
+Các API tại `/api/ai` phục vụ gợi ý đối chiếu bằng embedding, tìm ảnh, tạo bản nháp và chatbot. Xem [contract và cấu hình AI](../AI_FEATURES.md).
+
 ## Danh tính và bài đăng
 
 - Đăng nhập trả `access_token` và `refresh_token`. Gửi access token qua `Authorization: Bearer …`. Gửi refresh token trong JSON `{"refresh_token":"…"}` để đổi cả hai token. Refresh token có thời hạn 30 ngày và được thay sau mỗi lần dùng.

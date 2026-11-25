@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Box, MapPin } from 'lucide-react'
 import { formatDate } from '../../components/ui/live-format'
-import { postsApi, type PostType } from '../../lib/api/system'
+import { postsApi, type Post, type PostType } from '../../lib/api/system'
 import { apiAssetUrl } from '../../lib/api/client'
 
 export function PostCard({
@@ -25,12 +25,12 @@ export function PostCard({
     queryKey: ['posts', 'detail', id],
     queryFn: ({ signal }) => postsApi.detail(id, signal),
   })
-  const photo = detail.data?.images[0]?.file_path
+  const photos = detail.data?.images ?? []
   const postLocation = detail.data?.location ?? location
   return (
     <Link to={`/do-vat/${id}`} className="item-card">
       <div className={`item-card-image post-card-art ${type === 'FOUND' ? 'art-keys' : 'art-bag'}`}>
-        {photo ? <CardPhoto key={photo} url={apiAssetUrl(photo)} /> : <PhotoPlaceholder />}
+        <CardPhoto key={photos[0]?.id} photos={photos} />
         <span className={`item-type ${type === 'FOUND' ? 'found' : 'lost'}`}>
           {type === 'FOUND' ? 'Nhặt được' : 'Tìm đồ thất lạc'}
         </span>
@@ -56,17 +56,19 @@ function PhotoPlaceholder() {
   return <Box size={45} strokeWidth={1.1} aria-hidden="true" />
 }
 
-function CardPhoto({ url }: { url: string }) {
-  const [failed, setFailed] = useState(false)
-  return failed ? (
+function CardPhoto({ photos }: { photos: Post['images'] }) {
+  const [index, setIndex] = useState(0)
+  const photo = photos[index]
+  return !photo ? (
     <PhotoPlaceholder />
   ) : (
     <img
+      key={photo.id}
       className="post-card-photo"
-      src={url}
+      src={apiAssetUrl(photo.file_path)}
       alt=""
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => setIndex(index + 1)}
     />
   )
 }

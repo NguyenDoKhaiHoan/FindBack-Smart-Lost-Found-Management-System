@@ -30,11 +30,24 @@ export interface User extends PublicUser {
   phone: string | null
   role: 'USER' | 'ADMIN'
 }
+const authTimeoutMs = 12_000
+
 export const identityApi = {
   register: (body: Credentials & { full_name: string }) =>
-    apiRequest<User>(`${api}/auth/register`, { method: 'POST', body, auth: false }),
+    apiRequest<User>(`${api}/auth/register`, {
+      method: 'POST',
+      body,
+      auth: false,
+      timeoutMs: authTimeoutMs,
+    }),
   login: (body: Credentials, signal?: AbortSignal) =>
-    apiRequest<Tokens>(`${api}/auth/login`, { method: 'POST', body, auth: false, signal }),
+    apiRequest<Tokens>(`${api}/auth/login`, {
+      method: 'POST',
+      body,
+      auth: false,
+      signal,
+      timeoutMs: authTimeoutMs,
+    }),
   refresh: (refresh_token: string, signal: AbortSignal) =>
     apiRequest<Tokens>(`${api}/auth/refresh`, {
       method: 'POST',

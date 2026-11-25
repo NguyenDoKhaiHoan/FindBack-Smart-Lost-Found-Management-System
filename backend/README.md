@@ -25,6 +25,8 @@ Migration `0004_post_image_data` lưu ảnh bài đăng mới trong DB. Ảnh b�
 
 ## Kiểm thử
 
+Hướng dẫn cài mô hình CPU, cấu hình OpenAI và lập chỉ mục ở [Tính năng AI](../docs/AI_FEATURES.md).
+
 ```powershell
 uv run --locked pytest -q
 uv run --locked ruff check app tests alembic
