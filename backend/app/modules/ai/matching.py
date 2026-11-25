@@ -154,11 +154,12 @@ def score_by_details(source: Post, candidate: Post):
 
 def match_posts(db: Session, runtime: AIRuntime, item_id: UUID) -> MatchesResponse:
     runtime.require_enabled("matching")
+    mode = "details" if runtime.text_backend == "details" else "semantic"
     source = db.scalar(with_text_cache(public_post_query().where(Post.id == item_id)))
     if source is None:
         raise DomainError(404, "POST_NOT_FOUND", "Post not found")
     if not can_accept_claims(source):
-        return MatchesResponse(item_id=item_id, matches=[])
+        return MatchesResponse(item_id=item_id, matches=[], matching_mode=mode)
 
     opposite = "FOUND" if source.type == "LOST" else "LOST"
     candidates = list(
@@ -174,18 +175,18 @@ def match_posts(db: Session, runtime: AIRuntime, item_id: UUID) -> MatchesRespon
         if (hours := time_gap_hours(source, candidate)) is None or hours >= 0
     ]
     if not candidates:
-        return MatchesResponse(item_id=item_id, matches=[])
+        return MatchesResponse(item_id=item_id, matches=[], matching_mode=mode)
 
-    mode = "semantic"
-    try:
-        db.commit()
-        with runtime.inference():
-            vectors, pending = text_embeddings(db, runtime, [source, *candidates])
-    except DomainError as error:
-        if error.code not in {"AI_MODEL_UNAVAILABLE", "AI_BUSY"}:
-            raise
-        mode = "details"
-        vectors, pending = {}, False
+    vectors, pending = {}, False
+    if mode == "semantic":
+        try:
+            db.commit()
+            with runtime.inference():
+                vectors, pending = text_embeddings(db, runtime, [source, *candidates])
+        except DomainError as error:
+            if error.code not in {"AI_MODEL_UNAVAILABLE", "AI_BUSY"}:
+                raise
+            mode = "details"
 
     scored = []
     for candidate in candidates:

@@ -22,7 +22,7 @@ GitHub Actions chạy lint và kiểm thử backend, đồng thời chạy lint,
 
 Frontend production dùng FastAPI trên Render qua `VITE_API_BASE_URL` trong **Vercel → Settings → Environment Variables**. Cấu hình `CORS_ORIGINS` trên backend gồm tên miền frontend. Workflow kiểm tra mã backend bằng SQLite và triển khai frontend khi bật job Vercel CLI. [Kiểm tra kết nối API Render](https://findback-smart-lost-found-management.onrender.com/api/v1/health)
 
-Trên Render, `uv sync --locked` cài ONNX Runtime cho mục **Đồ vật có thể trùng khớp**. Giữ `AI_MATCHING_ENABLED=true` và `AI_TEXT_BACKEND=auto` hoặc chọn `onnx` để dùng bản MiniLM lượng tử hóa. Model tải lần đầu vào thư mục Hugging Face, cần khoảng 120 MB cho trọng số. Khi model chưa sẵn sàng, mục gợi ý đối chiếu từ khóa, loại đồ vật và dữ liệu công khai của tin.
+Trên Render, giữ `AI_MATCHING_ENABLED=true` và `AI_TEXT_BACKEND=auto` để mục **Đồ vật có thể trùng khớp** đối chiếu loại đồ vật, từ khóa và dữ liệu công khai của tin. Cách này tránh nạp MiniLM trên dịch vụ giới hạn RAM. Khi dịch vụ có đủ RAM để nạp mô hình, có thể chọn `AI_TEXT_BACKEND=onnx` để dùng bản MiniLM lượng tử hóa. `uv sync --locked` cài ONNX Runtime. Lần tải đầu cần khoảng 120 MB cho trọng số, với mức dùng RAM cao hơn khi khởi tạo mô hình.
 
 Chạy `uv run --locked alembic upgrade head` khi triển khai phiên bản có migration. Cấu hình `DATABASE_URL`, `JWT_SECRET_KEY` và khóa OpenAI ở dịch vụ backend. Tìm bằng ảnh dùng OpenCLIP trong nhóm phụ thuộc `ai`.
 

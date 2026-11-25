@@ -15,7 +15,7 @@ def main():
     engine = make_engine(settings)
     factory = make_session_factory(engine)
     try:
-        if settings.ai_matching_enabled:
+        if settings.ai_matching_enabled and runtime.text_backend != "details":
             pending = True
             while pending:
                 with factory() as db:

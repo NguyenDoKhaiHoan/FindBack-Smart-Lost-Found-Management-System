@@ -11,6 +11,7 @@ from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.modules.ai import images, matching
+from app.modules.ai.runtime import AIRuntime
 from app.modules.posts.models.post import Category, Post, PostImage
 from app.modules.posts.services.image_service import MAX_IMAGE_BYTES, image_path
 from app.modules.posts.services.listings import update_search_text
@@ -129,7 +130,8 @@ def test_smart_matching_filters_and_persists_vectors(world, monkeypatch):
     assert not world.client.get(f"{BASE}/matches/{world.ids['closed']}").json()["matches"]
 
 
-def test_matching_uses_post_details_when_text_model_is_unavailable(world, monkeypatch):
+@pytest.mark.parametrize("render", [False, True])
+def test_matching_uses_post_details_when_text_model_is_unavailable(world, monkeypatch, render):
     configure_posts(world)
     with world.factory() as db:
         db.get(Post, world.ids["lost"]).title = "Bỏ quên laptop ở khu tự học"
@@ -137,7 +139,11 @@ def test_matching_uses_post_details_when_text_model_is_unavailable(world, monkey
         db.get(Post, world.ids["unrelated"]).color_code = "BLACK"
         db.commit()
 
+    monkeypatch.setenv("RENDER", str(render).lower())
+    world.client.app.state.ai = AIRuntime(world.settings)
+
     def unavailable(runtime, texts):
+        assert not render, "Render auto mode should skip model loading"
         raise DomainError(503, "AI_MODEL_UNAVAILABLE", "Test model outage")
 
     monkeypatch.setattr(matching, "text_vectors", unavailable)

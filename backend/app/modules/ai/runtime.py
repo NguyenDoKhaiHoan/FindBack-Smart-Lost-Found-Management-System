@@ -2,6 +2,7 @@ from collections import OrderedDict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from importlib.util import find_spec
+from os import getenv
 from threading import BoundedSemaphore, Lock
 from time import monotonic
 from uuid import UUID, uuid4
@@ -41,7 +42,10 @@ class AIRuntime:
         self.openai: OpenAI | None = None
         self.text_backend = settings.ai_text_backend
         if self.text_backend == "auto":
-            self.text_backend = "torch" if find_spec("sentence_transformers") else "onnx"
+            if getenv("RENDER") == "true":
+                self.text_backend = "details"
+            else:
+                self.text_backend = "torch" if find_spec("sentence_transformers") else "onnx"
         self.text_model = None
         self.text_model_retry_at = 0.0
         self.image_model = None
