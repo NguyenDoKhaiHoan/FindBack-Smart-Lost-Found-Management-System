@@ -784,3 +784,72 @@ def test_chat_advises_on_situation_with_grounded_reply_and_fallback(world, provi
     assert len(calls) == 2 and answer.json()["related_items"] == []
     expected = "quán nào cuối cùng" if provider_ok else "Tìm đồ bằng hình ảnh"
     assert expected in answer.json()["reply"]
+
+
+@pytest.mark.parametrize(
+    ("question", "topic", "fact"),
+    [
+        (
+            "Tôi nhặt được ví có số điện thoại, làm sao đăng tin để bảo vệ thông tin?",
+            "privacy",
+            "Che số giấy tờ, số điện thoại",
+        ),
+        ("Tôi sửa số điện thoại của mình ở đâu?", "profile", "Lưu thay đổi"),
+        (
+            "Có người giả danh chủ tin và đòi mã OTP, tôi phải làm gì?",
+            "return_safely",
+            "Tránh chuyển tiền",
+        ),
+        (
+            "Tôi nhận nhầm đồ rồi và đã xác nhận, xử lý thế nào?",
+            "handover_problem",
+            "không có nút hoàn tác",
+        ),
+    ],
+)
+def test_chat_accepts_safety_and_account_guidance(world, question, topic, fact):
+    def handler(request):
+        body = json.loads(request.content)
+        if "tools" in body:
+            assert body["input"][-1]["content"] == question
+            return function_response("advise_recovery", {"topic": topic})
+        evidence = json.loads(body["input"])["verified_findback_information"]
+        assert fact in evidence
+        return composed_response(evidence)
+
+    mock_openai(world, handler)
+    answer = world.client.post(f"{BASE}/chat", json={"message": question}, headers=world.auth())
+    assert answer.status_code == 200, answer.text
+    assert fact in answer.json()["reply"]
+
+
+def test_chat_remembers_claim_guidance_for_an_ambiguous_photo_followup(world):
+    first = "Mình gửi yêu cầu nhận đồ hôm qua và đang chờ duyệt. Nên làm gì?"
+    followup = "Nếu tôi gửi thiếu ảnh thì sao?"
+    first_reply = "Mở Yêu cầu nhận đồ để xem trạng thái và bằng chứng đã nộp."
+
+    def handler(request):
+        body = json.loads(request.content)
+        if "tools" in body:
+            history = body["input"]
+            if history[-1]["content"] == first:
+                return function_response("advise_recovery", {"topic": "claim_status"})
+            assert [turn["content"] for turn in history] == [first, first_reply, followup]
+            return function_response("advise_recovery", {"topic": "claim_evidence"})
+        context = json.loads(body["input"])
+        if context["question"] == first:
+            return composed_response(first_reply)
+        assert context["recent_conversation"][-1]["content"] == first_reply
+        assert "Ảnh là tùy chọn" in context["verified_findback_information"]
+        return composed_response("Khi còn Chờ duyệt, chọn Bổ sung bằng chứng. Ảnh là tùy chọn.")
+
+    mock_openai(world, handler)
+    url = f"{BASE}/chat"
+    response = world.client.post(url, json={"message": first}, headers=world.auth()).json()
+    next_turn = world.client.post(
+        url,
+        json={"message": followup, "conversation_id": response["conversation_id"]},
+        headers=world.auth(),
+    )
+    assert next_turn.status_code == 200, next_turn.text
+    assert "Ảnh là tùy chọn" in next_turn.json()["reply"]

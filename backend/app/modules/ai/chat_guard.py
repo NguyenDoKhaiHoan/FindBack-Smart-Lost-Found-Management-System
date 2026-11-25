@@ -50,10 +50,23 @@ PRIVATE_CONTACT = re.compile(
     rf"\b.{{0,48}}\b{SUBJECT}\b|\b{SUBJECT}\b.{{0,48}}"
     r"\b(?:email|tai khoan|account|contact details)\b"
 )
+DISCLOSURE_REQUEST = re.compile(
+    r"\b(?:cho (?:toi|minh|em) (?:xin |xem |biet )?|gui cho (?:toi|minh|em) |"
+    r"cung cap (?:cho (?:toi|minh|em) )?|tra cuu |tim (?:cho|ho|giup) (?:toi|minh|em) |"
+    r"lay (?:cho|ho|giup) (?:toi|minh|em) |give me |show me )"
+    r"(?:tai khoan|mat khau|password|email|so dien thoai|sdt|so cccd|so can cuoc|"
+    r"so ho chieu|dia chi nha|ma otp|otp|ma pin|api key|khoa api|access token|"
+    r"refresh token|jwt|ma dang nhap|thong tin lien he|thong tin ca nhan|"
+    r"du lieu rieng tu|noi dung bang chung|bang chung rieng tu|"
+    r"phone number|home address|credentials|private data)\b"
+)
+THIRD_PARTY = re.compile(rf"\b{SUBJECT}\b")
+ASKS_FOR_VALUE = re.compile(r"\b(?:la gi|la bao nhieu|so bao nhieu|cho biet|muon biet|what is)\b")
 SECURITY = re.compile(
     r"\b(?:system prompt|developer message|system instructions|lenh he thong|"
     r"prompt he thong|chi dan noi bo|chi dan he thong|vuot quyen|bo qua bao mat|"
-    r"gia danh|mao danh|bypass|ignore (?:all |the )?(?:previous|prior) instructions|"
+    r"hay (?:gia danh|mao danh|dong gia)|bypass|"
+    r"ignore (?:all |the )?(?:previous|prior) instructions|"
     r"bo qua (?:tat ca )?(?:cac )?(?:quy tac|chi dan|huong dan)|"
     r"(?:truy cap|xuat|doc|dump|export) (?:co so du lieu|database))\b"
 )
@@ -80,10 +93,12 @@ def local_refusal(message: str) -> RefusalReason | None:
     question = normalized_question(message)
     if SECURITY.search(question):
         return "security"
-    if (
-        CREDENTIALS.search(question)
-        or PRIVATE_RECORDS.search(question)
-        or PRIVATE_CONTACT.search(question)
-    ) and not ACCOUNT_HELP.fullmatch(question):
+    if ACCOUNT_HELP.fullmatch(question):
+        return None
+    sensitive = CREDENTIALS.search(question) or PRIVATE_RECORDS.search(question)
+    if DISCLOSURE_REQUEST.search(question) or (
+        (PRIVATE_CONTACT.search(question) or (sensitive and THIRD_PARTY.search(question)))
+        and ASKS_FOR_VALUE.search(question)
+    ):
         return "private_data"
     return None
