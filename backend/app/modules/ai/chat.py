@@ -117,7 +117,9 @@ RECOVERY_GUIDANCE = {
         "Mở Khám phá và thử các địa điểm cuối cùng bạn đã ghé. Nếu còn ảnh, dùng "
         "'Tìm đồ bằng hình ảnh' để tìm bài đăng có ảnh tương tự. "
         "Khi chưa thấy tin nhặt, có thể đăng tin mất đồ. "
-        "Nếu chưa nhớ địa điểm, bắt đầu bằng khoảng thời gian hoặc đặc điểm nổi bật."
+        "Nếu chưa nhớ địa điểm, bắt đầu bằng khoảng thời gian hoặc đặc điểm nổi bật. "
+        "Khi mất trên xe buýt và chưa nhớ tuyến, ghi lại điểm lên, điểm xuống và giờ ước chừng. "
+        "Kiểm tra vé hoặc lịch sử thanh toán nếu có rồi hỏi đơn vị vận hành khi xác định tuyến."
     ),
     "prove_ownership": (
         "Mở tin nhặt được, chọn 'Đây là đồ của tôi' và gửi bằng chứng riêng tư. "
@@ -141,7 +143,7 @@ RECOVERY_GUIDANCE = {
         "Chờ duyệt nghĩa là chủ tin chưa quyết định. FindBack không cam kết thời hạn duyệt. "
         "Khi còn chờ duyệt, người gửi có thể bổ sung bằng chứng trong chi tiết yêu cầu. "
         "Nếu bị từ chối, xem phản hồi ghi trong yêu cầu nếu có. "
-        "Thông báo trong ứng dụng giúp theo dõi thay đổi. "
+        "Mở mục Thông báo trong ứng dụng để xem các cập nhật. "
         "Báo cáo vi phạm chỉ dùng khi tin có vi phạm."
     ),
     "claim_evidence": (
@@ -161,8 +163,9 @@ RECOVERY_GUIDANCE = {
     "privacy": (
         "Khi đăng tin công khai, chỉ nêu loại đồ, nơi và thời gian mất hoặc nhặt. "
         "Che số giấy tờ, số điện thoại, địa chỉ, mã vạch và thông tin nhận dạng trên ảnh. "
-        "Giữ lại một dấu hiệu để chủ đồ tự mô tả khi xác minh. Dùng yêu cầu nhận đồ để gửi "
-        "bằng chứng cần thiết, sau khi che thông tin thừa. Tránh gửi mật khẩu và mã OTP."
+        "Giữ lại một dấu hiệu để chủ đồ tự mô tả khi xác minh. Nếu bạn là người nhặt, "
+        "hướng dẫn người nhận gửi yêu cầu và bằng chứng của họ qua FindBack. Giữ kín ảnh giấy tờ "
+        "và thông tin đã che. Tránh gửi mật khẩu và mã OTP."
     ),
     "profile": (
         "Mở Hồ sơ cá nhân. Sửa trường Số điện thoại, Họ và tên hoặc URL ảnh đại diện rồi "
