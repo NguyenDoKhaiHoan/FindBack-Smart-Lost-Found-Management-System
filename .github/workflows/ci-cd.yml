@@ -1,0 +1,107 @@
+name: FindBack CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: '0.12.7'
+          python-version: '3.14'
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      - run: uv run --no-sync ruff check app tests alembic
+      - run: uv run --no-sync pytest -q
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    name: Deploy frontend to Vercel
+    needs: [backend, frontend]
+    if: >-
+      vars.VERCEL_CLI_DEPLOY == 'true' &&
+      github.ref_type == 'branch' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref_name == (vars.PRODUCTION_BRANCH || 'hoan')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: vercel-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.vercel.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install Vercel CLI
+        run: npm install --global vercel@66.6.0
+      - name: Build and deploy the checked commit
+        id: vercel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TELEMETRY_DISABLED: '1'
+        run: |
+          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Configure ${key} in the GitHub production environment."
+              exit 1
+            fi
+          done
+
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+
+          latest_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq '.object.sha')
+          if [[ "$latest_sha" != "$GITHUB_SHA" ]]; then
+            echo "::notice::A newer commit is on this branch. Skipping production deployment."
+            exit 0
+          fi
+
+          url=$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")
+          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"

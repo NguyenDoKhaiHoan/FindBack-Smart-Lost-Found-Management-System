@@ -4,6 +4,8 @@ FindBack là nền tảng quản lý tin mất đồ và nhặt được đồ, 
 
 Một backend FastAPI phục vụ Identity, Posts, Search & Matching, Claims & Returns và Notifications & Admin. Xem [danh mục API](docs/api/endpoints.md) và [hướng dẫn chạy](backend/README.md).
 
+[Hướng dẫn bốn tính năng AI](docs/AI_FEATURES.md) có cấu hình model, migration, kiểm thử và kịch bản demo local.
+
 Tài liệu nền tảng: [Phân tích hệ thống FindBack](https://docs.google.com/document/d/1F8Ngu5ViIxa2_9FLnt-T6s5GJ4o-B8GCtC_KmvlPFOg/edit?usp=sharing).
 
 ## 1. Mục tiêu và phạm vi MVP
@@ -136,6 +138,8 @@ git switch -c feat/identity-auth
 5. Bổ sung migration và kiểm thử cho nghiệp vụ được triển khai, rồi mở pull request.
 
 Chạy PostgreSQL theo [hướng dẫn Docker](infra/docker/README.md), rồi chạy API và pytest theo [hướng dẫn backend](backend/README.md). Để chạy giao diện, dùng `cd frontend`, `npm ci` và `npm run dev`. Xem cấu hình kết nối API và các lệnh kiểm tra trong [hướng dẫn frontend](frontend/README.md).
+
+[Hướng dẫn CI/CD](docs/deployment.md) mô tả thiết lập GitHub Actions để kiểm thử và tự triển khai frontend lên Vercel.
 
 ## 7. Quy ước cộng tác
 
