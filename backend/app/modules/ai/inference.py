@@ -87,6 +87,18 @@ def predict_image_type(
 
 
 def image_vectors(runtime: AIRuntime, images: list[bytes]) -> list[list[float]]:
+    if runtime.image_backend == "mobilenet":
+        try:
+            from app.modules.ai.image_mobilenet import MobileImageEncoder
+
+            if runtime.image_model is None:
+                runtime.image_model = MobileImageEncoder(runtime.settings.ai_cpu_threads)
+            return runtime.image_model.encode(images)
+        except Exception as error:
+            logger.warning("MobileNet image backend unavailable (%s)", type(error).__name__)
+            raise DomainError(
+                503, "AI_MODEL_UNAVAILABLE", "Image embedding model unavailable"
+            ) from None
     try:
         import open_clip
         import torch

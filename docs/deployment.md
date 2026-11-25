@@ -24,7 +24,13 @@ Frontend production dùng FastAPI trên Render qua `VITE_API_BASE_URL` trong **V
 
 Trên Render, giữ `AI_MATCHING_ENABLED=true` và `AI_TEXT_BACKEND=auto` để mục **Đồ vật có thể trùng khớp** đối chiếu loại đồ vật, từ khóa và dữ liệu công khai của tin. Cách này tránh nạp MiniLM trên dịch vụ giới hạn RAM. Khi dịch vụ có đủ RAM để nạp mô hình, có thể chọn `AI_TEXT_BACKEND=onnx` để dùng bản MiniLM lượng tử hóa. `uv sync --locked` cài ONNX Runtime. Lần tải đầu cần khoảng 120 MB cho trọng số, với mức dùng RAM cao hơn khi khởi tạo mô hình.
 
-Chạy `uv run --locked alembic upgrade head` khi triển khai phiên bản có migration. Cấu hình `DATABASE_URL`, `JWT_SECRET_KEY` và khóa OpenAI ở dịch vụ backend. Tìm bằng ảnh dùng OpenCLIP trong nhóm phụ thuộc `ai`.
+Trên Render, `AI_IMAGE_SEARCH_ENABLED=true` và `AI_IMAGE_BACKEND=auto` chọn MobileNet lượng tử hóa qua ONNX Runtime. Mô hình khoảng 4 MB được tải vào bộ nhớ đệm ở lượt tìm đầu tiên. Bộ tìm ảnh dùng cả đặc trưng nhận diện và đặc trưng hình ảnh để đối chiếu với ảnh của các tin đang mở. [MobileNet ONNX](https://huggingface.co/onnxmodelzoo/mobilenetv2-12-int8)
+
+Chạy `uv run --locked alembic upgrade head` khi triển khai phiên bản có migration. Đặt `DATABASE_URL` và `JWT_SECRET_KEY` trên dịch vụ backend.
+
+## Chatbot production
+
+Trong **Render → FindBack backend → Environment**, đặt `OPENAI_API_KEY` bằng khóa của dự án OpenAI, `OPENAI_CHAT_MODEL=gpt-4.1-mini` hoặc model đã dùng ở local, và `AI_CHATBOT_ENABLED=true`. Lưu bằng **Save and deploy** để tiến trình đọc cấu hình mới. Dùng `OPENAI_VISION_MODEL` nếu bật tạo bản nháp tin từ ảnh. Vercel dùng `VITE_API_BASE_URL` để gọi Render. [Biến môi trường và secret trên Render](https://render.com/docs/configure-environment-variables)
 
 ## Kiểm tra sau khi triển khai
 

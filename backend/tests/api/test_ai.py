@@ -252,6 +252,48 @@ def test_image_search_prefers_laptop_to_visually_similar_phone(world, monkeypatc
     assert response.json()["results"][0]["same_item_type"] is True
 
 
+def test_render_image_search_uses_public_title_of_near_duplicate(world, monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    runtime = AIRuntime(world.settings)
+    assert runtime.image_backend == "mobilenet"
+    world.client.app.state.ai = runtime
+    with world.factory() as db:
+        for key, title in (("found", "Nhặt được điện thoại đen"), ("second", "Nhặt được ví đen")):
+            db.get(Post, world.ids[key]).title = title
+            db.add(
+                PostImage(
+                    post_id=world.ids[key],
+                    original_name="photo.png",
+                    mime_type="image/png",
+                    sort_order=0,
+                    size_bytes=len(png()[1]),
+                    image_data=png()[1],
+                )
+            )
+        db.commit()
+
+    probabilities = [0.0] * 1000
+    probabilities[893] = 1.0  # A phone case can be classified as a wallet.
+    reference = [*probabilities, *([20, 40, 60] * 64), *([0, 1] * 32)]
+    other = [*probabilities, *([240, 240, 240] * 64), *([1, 0] * 32)]
+
+    def embeddings(db, runtime, query, data):
+        return (
+            reference,
+            [
+                (image, reference if image.post_id == world.ids["found"] else other)
+                for image in db.scalars(select(PostImage))
+            ],
+            False,
+        )
+
+    monkeypatch.setattr(images, "image_embeddings", embeddings)
+    response = world.client.post(f"{BASE}/image-search", files={"file": png()})
+    assert response.status_code == 200, response.text
+    assert response.json()["detected_item_type"] == "Điện thoại"
+    assert [result["item_id"] for result in response.json()["results"]] == [str(world.ids["found"])]
+
+
 @pytest.mark.parametrize(
     ("payload", "status"),
     [

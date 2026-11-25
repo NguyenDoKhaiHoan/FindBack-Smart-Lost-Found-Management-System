@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     media_root: Path = BACKEND_DIR / "uploads"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     openai_api_key: SecretStr | None = None
-    openai_chat_model: str = ""
+    openai_chat_model: str = "gpt-4.1-mini"
     openai_vision_model: str = ""
     openai_timeout_seconds: float = Field(default=30, ge=1, le=60)
     ai_matching_enabled: bool = True
@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ai_chatbot_enabled: bool = True
     ai_cpu_threads: int = Field(default=2, ge=1, le=8)
     ai_text_backend: Literal["auto", "torch", "onnx", "details"] = "auto"
+    ai_image_backend: Literal["auto", "openclip", "mobilenet"] = "auto"
     ai_text_index_batch: int = Field(default=32, ge=4, le=128)
     ai_image_index_batch: int = Field(default=12, ge=1, le=64)
     ai_requests_per_minute: int = Field(default=12, ge=1, le=120)

@@ -41,6 +41,11 @@ def compact_jpeg(data: bytes, edge: int) -> bytes:
 def image_embeddings(
     db: Session, runtime: AIRuntime, posts_query, query_image: bytes | None = None
 ):
+    model_key = IMAGE_KEY
+    if runtime.image_backend == "mobilenet":
+        from app.modules.ai.image_mobilenet import KEY
+
+        model_key = KEY
     rows = db.execute(
         select(
             PostImage,
@@ -62,7 +67,7 @@ def image_embeddings(
             except OSError:
                 continue
             version = f"file:{stat.st_size}:{stat.st_mtime_ns}"
-        key = embedding_key(IMAGE_KEY, version)
+        key = embedding_key(model_key, version)
         if old_key == key and vector is not None:
             if vector:
                 vectors.append((image, vector))
@@ -138,12 +143,17 @@ def search_images(
     with runtime.inference():
         reference, vectors, pending = image_embeddings(db, runtime, query, data)
         prototypes = runtime.image_prototypes
-    kind = predict_image_type(reference, prototypes) if reference else None
+    mobile = runtime.image_backend == "mobilenet"
+    if mobile:
+        from app.modules.ai.image_mobilenet import classify, likeness
+
+        compare = likeness
+        kind = classify(reference) if reference else None
+    else:
+        compare = cosine_similarity
+        kind = predict_image_type(reference, prototypes) if reference else None
     scored = (
-        [
-            (image, vector, round(cosine_similarity(reference, vector), 4))
-            for image, vector in vectors
-        ]
+        [(image, vector, round(compare(reference, vector), 4)) for image, vector in vectors]
         if reference
         else []
     )
@@ -152,7 +162,21 @@ def search_images(
         if scored
         else {}
     )
-    if kind is None and prototypes:
+    if mobile:
+        by_type = {}
+        for image, _, score in scored:
+            label = title_item_type(titles.get(image.post_id))
+            if label:
+                by_type[label] = max(by_type.get(label, 0), score)
+        ranked_types = sorted(((score, label) for label, score in by_type.items()), reverse=True)
+        if ranked_types:
+            first_score, first_type = ranked_types[0]
+            next_score = ranked_types[1][0] if len(ranked_types) > 1 else 0
+            if first_score >= NEAR_DUPLICATE > next_score or (
+                len(ranked_types) > 1 and first_score >= 0.50 and first_score - next_score >= 0.18
+            ):
+                kind = first_type
+    elif kind is None and prototypes:
         near_duplicate_types = {
             label
             for image, _, score in scored
@@ -165,7 +189,11 @@ def search_images(
         same_type = False
         if kind in ITEM_TYPES:
             from_title = title_item_type(titles.get(image.post_id))
-            from_photo = predict_image_type(vector, prototypes, margin=0.025)
+            from_photo = (
+                classify(vector)
+                if mobile and from_title is None
+                else predict_image_type(vector, prototypes, margin=0.025)
+            )
             conflicts = any(label not in (None, kind) for label in (from_title, from_photo))
             same_type = kind in (from_title, from_photo) and not conflicts
             if conflicts and score < NEAR_DUPLICATE:

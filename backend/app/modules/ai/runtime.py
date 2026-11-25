@@ -48,6 +48,9 @@ class AIRuntime:
                 self.text_backend = "torch" if find_spec("sentence_transformers") else "onnx"
         self.text_model = None
         self.text_model_retry_at = 0.0
+        self.image_backend = settings.ai_image_backend
+        if self.image_backend == "auto":
+            self.image_backend = "mobilenet" if getenv("RENDER") == "true" else "openclip"
         self.image_model = None
         self.image_prototypes: dict[str, list[float]] = {}
 
