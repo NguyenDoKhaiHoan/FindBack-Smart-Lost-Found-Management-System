@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
     ai_auto_post_enabled: bool = True
     ai_chatbot_enabled: bool = True
     ai_cpu_threads: int = Field(default=2, ge=1, le=8)
+    ai_text_backend: Literal["auto", "torch", "onnx"] = "auto"
     ai_text_index_batch: int = Field(default=32, ge=4, le=128)
     ai_image_index_batch: int = Field(default=12, ge=1, le=64)
     ai_requests_per_minute: int = Field(default=12, ge=1, le=120)

@@ -14,6 +14,7 @@ from app.modules.ai import images, matching
 from app.modules.posts.models.post import Category, Post, PostImage
 from app.modules.posts.services.image_service import MAX_IMAGE_BYTES, image_path
 from app.modules.posts.services.listings import update_search_text
+from app.shared.errors import DomainError
 
 BASE = "/api/ai"
 EVENT = datetime(2026, 11, 20, 8, tzinfo=timezone.utc)
@@ -126,6 +127,27 @@ def test_smart_matching_filters_and_persists_vectors(world, monkeypatch):
     assert len(calls) == 4
     assert world.client.get(f"{BASE}/matches/{world.ids['hidden']}").status_code == 404
     assert not world.client.get(f"{BASE}/matches/{world.ids['closed']}").json()["matches"]
+
+
+def test_matching_uses_post_details_when_text_model_is_unavailable(world, monkeypatch):
+    configure_posts(world)
+    with world.factory() as db:
+        db.get(Post, world.ids["lost"]).title = "Bỏ quên laptop ở khu tự học"
+        db.get(Post, world.ids["found"]).title = "Nhặt được laptop ở cổng trường"
+        db.get(Post, world.ids["unrelated"]).color_code = "BLACK"
+        db.commit()
+
+    def unavailable(runtime, texts):
+        raise DomainError(503, "AI_MODEL_UNAVAILABLE", "Test model outage")
+
+    monkeypatch.setattr(matching, "text_vectors", unavailable)
+    response = world.client.get(f"{BASE}/matches/{world.ids['lost']}")
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["matching_mode"] == "details"
+    assert not result["indexing_pending"]
+    assert [item["item_id"] for item in result["matches"]] == [str(world.ids["found"])]
+    assert "Loại đồ vật hoặc từ khóa tương tự" in result["matches"][0]["matching_reasons"]
 
 
 def test_image_search_uses_all_photos_and_legacy_storage(world, monkeypatch):

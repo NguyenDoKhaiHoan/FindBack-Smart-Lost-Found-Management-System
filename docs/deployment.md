@@ -20,9 +20,11 @@ GitHub Actions chạy lint và kiểm thử backend, đồng thời chạy lint,
 
 ## Kết nối API production
 
-FastAPI cần một dịch vụ riêng có PostgreSQL. Sau khi có URL API công khai, thêm `VITE_API_BASE_URL` trong **Vercel → Settings → Environment Variables** cho môi trường Production, ví dụ `https://api.example.com`. Trên backend, thêm tên miền frontend vào `CORS_ORIGINS`. Website hiện tại phục vụ frontend trên Vercel. Workflow này kiểm tra mã backend bằng SQLite và triển khai frontend.
+Frontend production dùng FastAPI trên Render qua `VITE_API_BASE_URL` trong **Vercel → Settings → Environment Variables**. Cấu hình `CORS_ORIGINS` trên backend gồm tên miền frontend. Workflow kiểm tra mã backend bằng SQLite và triển khai frontend khi bật job Vercel CLI. [Kiểm tra kết nối API Render](https://findback-smart-lost-found-management.onrender.com/api/v1/health)
 
-Trên dịch vụ backend, chạy `uv run --locked alembic upgrade head` khi triển khai phiên bản có migration. Cấu hình `DATABASE_URL`, `JWT_SECRET_KEY` và khóa OpenAI ở dịch vụ backend. Các tính năng dùng mô hình CPU cần nhóm phụ thuộc `ai` và dung lượng cho trọng số.
+Trên Render, `uv sync --locked` cài ONNX Runtime cho mục **Đồ vật có thể trùng khớp**. Giữ `AI_MATCHING_ENABLED=true` và `AI_TEXT_BACKEND=auto` hoặc chọn `onnx` để dùng bản MiniLM lượng tử hóa. Model tải lần đầu vào thư mục Hugging Face, cần khoảng 120 MB cho trọng số. Khi model chưa sẵn sàng, mục gợi ý đối chiếu từ khóa, loại đồ vật và dữ liệu công khai của tin.
+
+Chạy `uv run --locked alembic upgrade head` khi triển khai phiên bản có migration. Cấu hình `DATABASE_URL`, `JWT_SECRET_KEY` và khóa OpenAI ở dịch vụ backend. Tìm bằng ảnh dùng OpenCLIP trong nhóm phụ thuộc `ai`.
 
 ## Kiểm tra sau khi triển khai
 

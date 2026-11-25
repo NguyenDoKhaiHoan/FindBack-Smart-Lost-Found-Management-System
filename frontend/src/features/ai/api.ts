@@ -59,9 +59,11 @@ export interface ChatReply {
 
 export const aiApi = {
   matches: (id: string) =>
-    apiRequest<{ matches: AIMatch[]; indexing_pending: boolean }>(`/api/ai/matches/${id}`, {
-      auth: false,
-    }),
+    apiRequest<{
+      matches: AIMatch[]
+      indexing_pending: boolean
+      matching_mode?: 'semantic' | 'details'
+    }>(`/api/ai/matches/${id}`, { auth: false }),
   images: (source: File | string, type: PostType | '', category: string) => {
     const body = new FormData()
     if (typeof source === 'string') body.set('image_id', source)

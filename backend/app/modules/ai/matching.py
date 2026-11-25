@@ -3,7 +3,14 @@ from uuid import UUID
 from sqlalchemy import update
 from sqlalchemy.orm import Session, selectinload, undefer
 
-from app.modules.ai.inference import TEXT_KEY, cosine_similarity, embedding_key, text_vectors
+from app.modules.ai.image_types import title_item_type
+from app.modules.ai.inference import (
+    TEXT_KEY,
+    TEXT_ONNX_KEY,
+    cosine_similarity,
+    embedding_key,
+    text_vectors,
+)
 from app.modules.ai.runtime import AIRuntime
 from app.modules.ai.schemas import ItemCard, MatchCard, MatchesResponse
 from app.modules.matching.services.scoring import tokens
@@ -19,11 +26,12 @@ def open_posts():
 def text_embeddings(db: Session, runtime: AIRuntime, posts: list[Post]):
     vectors = {}
     missing = []
+    model_key = TEXT_ONNX_KEY if runtime.text_backend == "onnx" else TEXT_KEY
     for post in posts:
         text = "\n".join(value.strip() for value in (post.title, post.description) if value)
         if not text.strip():
             continue
-        key = embedding_key(TEXT_KEY, text)
+        key = embedding_key(model_key, text)
         if post.ai_embedding_key == key and post.ai_embedding:
             vectors[post.id] = post.ai_embedding
         else:
@@ -57,7 +65,7 @@ def time_gap_hours(first: Post, second: Post) -> float | None:
     return (found.event_time - lost.event_time).total_seconds() / 3600
 
 
-def score_pair(first: Post, second: Post, text: float | None):
+def score_pair(first: Post, second: Post, text: float | None, *, keywords_only: bool = False):
     if first.id == second.id or {first.type, second.type} != {"LOST", "FOUND"}:
         return None
     if not can_accept_claims(first) or not can_accept_claims(second):
@@ -71,7 +79,11 @@ def score_pair(first: Post, second: Post, text: float | None):
     if text is not None:
         parts.append((0.50, text))
         if text >= 0.55:
-            reasons.append("Tiêu đề hoặc mô tả tương tự")
+            reasons.append(
+                "Loại đồ vật hoặc từ khóa tương tự"
+                if keywords_only
+                else "Tiêu đề hoặc mô tả tương tự"
+            )
 
     same_category = False
     same_color = False
@@ -126,63 +138,89 @@ def with_text_cache(statement):
     return statement.options(undefer(Post.ai_embedding_key), undefer(Post.ai_embedding))
 
 
+def score_by_details(source: Post, candidate: Post):
+    source_type = title_item_type(source.title)
+    candidate_type = title_item_type(candidate.title)
+    if source_type and candidate_type:
+        if source_type != candidate_type:
+            return None
+        similarity = 0.65
+    else:
+        first = tokens(source.title or "")
+        second = tokens(candidate.title or "")
+        similarity = len(first & second) / len(first | second) if first and second else None
+    return score_pair(source, candidate, similarity, keywords_only=True)
+
+
 def match_posts(db: Session, runtime: AIRuntime, item_id: UUID) -> MatchesResponse:
     runtime.require_enabled("matching")
-    with runtime.inference():
-        source = db.scalar(with_text_cache(public_post_query().where(Post.id == item_id)))
-        if source is None:
-            raise DomainError(404, "POST_NOT_FOUND", "Post not found")
-        if not can_accept_claims(source):
-            return MatchesResponse(item_id=item_id, matches=[])
+    source = db.scalar(with_text_cache(public_post_query().where(Post.id == item_id)))
+    if source is None:
+        raise DomainError(404, "POST_NOT_FOUND", "Post not found")
+    if not can_accept_claims(source):
+        return MatchesResponse(item_id=item_id, matches=[])
 
-        opposite = "FOUND" if source.type == "LOST" else "LOST"
-        candidates = list(
-            db.scalars(
-                with_text_cache(
-                    open_posts()
-                    .where(Post.type == opposite)
-                    .order_by(Post.created_at.desc(), Post.id)
-                )
+    opposite = "FOUND" if source.type == "LOST" else "LOST"
+    candidates = list(
+        db.scalars(
+            with_text_cache(
+                open_posts().where(Post.type == opposite).order_by(Post.created_at.desc(), Post.id)
             )
         )
-        candidates = [
-            candidate
-            for candidate in candidates
-            if (hours := time_gap_hours(source, candidate)) is None or hours >= 0
-        ]
-        if not candidates:
-            return MatchesResponse(item_id=item_id, matches=[])
+    )
+    candidates = [
+        candidate
+        for candidate in candidates
+        if (hours := time_gap_hours(source, candidate)) is None or hours >= 0
+    ]
+    if not candidates:
+        return MatchesResponse(item_id=item_id, matches=[])
 
-        vectors, pending = text_embeddings(db, runtime, [source, *candidates])
-        scored = []
-        for candidate in candidates:
+    mode = "semantic"
+    try:
+        db.commit()
+        with runtime.inference():
+            vectors, pending = text_embeddings(db, runtime, [source, *candidates])
+    except DomainError as error:
+        if error.code not in {"AI_MODEL_UNAVAILABLE", "AI_BUSY"}:
+            raise
+        mode = "details"
+        vectors, pending = {}, False
+
+    scored = []
+    for candidate in candidates:
+        if mode == "details":
+            result = score_by_details(source, candidate)
+        else:
             text = (
                 cosine_similarity(vectors[source.id], vectors[candidate.id])
                 if source.id in vectors and candidate.id in vectors
                 else None
             )
             result = score_pair(source, candidate, text)
-            if result:
-                score, reasons = result
-                scored.append((score, candidate.id, reasons))
-        scored.sort(key=lambda entry: (-entry[0], entry[1]))
-        chosen = scored[:5]
-        visible = {
-            post.id: post
-            for post in db.scalars(
-                open_posts()
-                .where(Post.id.in_([item_id, *(key for _, key, _ in chosen)]))
-                .options(selectinload(Post.images))
-            )
-        }
-        matches = [
-            MatchCard(
-                **ItemCard.from_post(visible[key]).model_dump(),
-                matched_item_id=key,
-                similarity_score=score,
-                matching_reasons=reasons,
-            )
-            for score, key, reasons in chosen
-            if key in visible and item_id in visible
-        ]
-        return MatchesResponse(item_id=item_id, matches=matches, indexing_pending=pending)
+        if result:
+            score, reasons = result
+            scored.append((score, candidate.id, reasons))
+    scored.sort(key=lambda entry: (-entry[0], entry[1]))
+    chosen = scored[:5]
+    visible = {
+        post.id: post
+        for post in db.scalars(
+            open_posts()
+            .where(Post.id.in_([item_id, *(key for _, key, _ in chosen)]))
+            .options(selectinload(Post.images))
+        )
+    }
+    matches = [
+        MatchCard(
+            **ItemCard.from_post(visible[key]).model_dump(),
+            matched_item_id=key,
+            similarity_score=score,
+            matching_reasons=reasons,
+        )
+        for score, key, reasons in chosen
+        if key in visible and item_id in visible
+    ]
+    return MatchesResponse(
+        item_id=item_id, matches=matches, indexing_pending=pending, matching_mode=mode
+    )

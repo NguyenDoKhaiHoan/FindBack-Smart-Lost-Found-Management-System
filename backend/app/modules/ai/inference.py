@@ -1,6 +1,8 @@
 from hashlib import sha256
 from io import BytesIO
+from logging import getLogger
 from math import isfinite, sqrt
+from time import monotonic
 
 from PIL import Image
 
@@ -8,10 +10,14 @@ from app.modules.ai.image_types import PROMPTS
 from app.modules.ai.runtime import AIRuntime
 from app.shared.errors import DomainError
 
+logger = getLogger(__name__)
+
 TEXT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+TEXT_ONNX_REVISION = "a3ded7f4d0d725c6fc251504622d65b2516a3aa1"
 IMAGE_MODEL = "ViT-B-32-quickgelu"
 IMAGE_WEIGHTS = "openai"
 TEXT_KEY = f"{TEXT_MODEL}:v1"
+TEXT_ONNX_KEY = f"{TEXT_MODEL}:onnx:{TEXT_ONNX_REVISION}:v1"
 IMAGE_KEY = f"{IMAGE_MODEL}:{IMAGE_WEIGHTS}:v1"
 
 
@@ -31,20 +37,40 @@ def cosine_similarity(first: list[float], second: list[float]) -> float:
 
 
 def text_vectors(runtime: AIRuntime, texts: list[str]) -> list[list[float]]:
+    if monotonic() < runtime.text_model_retry_at:
+        raise DomainError(503, "AI_MODEL_UNAVAILABLE", "Text embedding model unavailable")
     try:
-        import torch
-        from sentence_transformers import SentenceTransformer
+        if runtime.text_backend == "onnx":
+            from app.modules.ai.text_onnx import OnnxTextEncoder
 
-        torch.set_num_threads(runtime.settings.ai_cpu_threads)
-        if runtime.text_model is None:
-            runtime.text_model = SentenceTransformer(
-                TEXT_MODEL, device="cpu", model_kwargs={"use_safetensors": True}
-            )
-        return runtime.text_model.encode(
-            texts, batch_size=8, normalize_embeddings=True, show_progress_bar=False
-        ).tolist()
-    except (ImportError, OSError, ValueError, RuntimeError):
+            if runtime.text_model is None:
+                runtime.text_model = OnnxTextEncoder(
+                    TEXT_MODEL, TEXT_ONNX_REVISION, runtime.settings.ai_cpu_threads
+                )
+            return runtime.text_model.encode(texts)
+        return torch_text_vectors(runtime, texts)
+    except Exception as error:
+        # External model loaders and runtimes define their own exception types.
+        logger.warning(
+            "Text embedding backend %s unavailable (%s)", runtime.text_backend, type(error).__name__
+        )
+        runtime.text_model = None
+        runtime.text_model_retry_at = monotonic() + 60
         raise DomainError(503, "AI_MODEL_UNAVAILABLE", "Text embedding model unavailable") from None
+
+
+def torch_text_vectors(runtime: AIRuntime, texts: list[str]) -> list[list[float]]:
+    import torch
+    from sentence_transformers import SentenceTransformer
+
+    torch.set_num_threads(runtime.settings.ai_cpu_threads)
+    if runtime.text_model is None:
+        runtime.text_model = SentenceTransformer(
+            TEXT_MODEL, device="cpu", model_kwargs={"use_safetensors": True}
+        )
+    return runtime.text_model.encode(
+        texts, batch_size=8, normalize_embeddings=True, show_progress_bar=False
+    ).tolist()
 
 
 def predict_image_type(

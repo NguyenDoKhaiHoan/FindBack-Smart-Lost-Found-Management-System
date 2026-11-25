@@ -25,6 +25,9 @@ export function SuggestedMatches({ id }: { id: string }) {
         error={query.error}
         retry={() => void query.refetch()}
       />
+      {query.data?.matching_mode === 'details' && (
+        <p className="muted">Kết quả được đối chiếu theo từ khóa và thông tin tin đăng.</p>
+      )}
       {query.data?.indexing_pending && (
         <p role="status">
           Đang cập nhật chỉ mục.{' '}

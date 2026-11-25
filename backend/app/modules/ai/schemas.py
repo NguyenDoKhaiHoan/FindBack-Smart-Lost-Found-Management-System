@@ -43,6 +43,7 @@ class MatchesResponse(BaseModel):
     item_id: UUID
     matches: list[MatchCard]
     indexing_pending: bool = False
+    matching_mode: Literal["semantic", "details"] = "semantic"
 
 
 class ImageCard(ItemCard):
