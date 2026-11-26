@@ -7,7 +7,7 @@ import onnxruntime as ort
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageOps
 
-from app.modules.ai.inference import predict_image_type
+from app.modules.ai.inference import cosine_similarity
 
 MODEL_ID = "Xenova/clip-vit-base-patch32"
 REVISION = "6b7c523703ae26e39be4b03774966f8571c7f523"
@@ -38,4 +38,15 @@ class ClipImageClassifier:
             rgb = np.asarray(crop, dtype=np.float32) / 255
         pixels = np.ascontiguousarray(((rgb - MEAN) / STD).transpose(2, 0, 1)[None])
         (vector,) = self.session.run(["image_embeds"], {self.input_name: pixels})
-        return predict_image_type(vector.flatten().tolist(), self.prototypes, margin=0.045)
+        return best_type(vector.flatten().tolist(), self.prototypes)
+
+
+def best_type(vector: list[float], prototypes: dict[str, list[float]]) -> str | None:
+    scores: dict[str, float] = {}
+    for label, prototype in prototypes.items():
+        kind = "laptop" if label in {"laptop_rear", "laptop_closed"} else label
+        scores[kind] = max(scores.get(kind, 0), cosine_similarity(vector, prototype))
+    (first, kind), (second, _) = sorted(
+        ((score, label) for label, score in scores.items()), reverse=True
+    )[:2]
+    return kind if first >= 0.18 and first - second >= 0.045 else None

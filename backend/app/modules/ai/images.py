@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi import UploadFile
 from PIL import Image
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select, update
+from sqlalchemy.orm import Session, selectinload
 
 from app.modules.ai.image_types import ITEM_TYPES, title_item_type
 from app.modules.ai.inference import (
@@ -17,7 +17,7 @@ from app.modules.ai.inference import (
 )
 from app.modules.ai.matching import open_posts
 from app.modules.ai.runtime import AIRuntime
-from app.modules.ai.schemas import ImageCard, ImageSearchResponse
+from app.modules.ai.schemas import ImageCard, ImageSearchResponse, ItemCard
 from app.modules.posts.models.post import Post, PostImage
 from app.modules.posts.schemas.post import PostType
 from app.modules.posts.services.image_service import MAX_IMAGE_BYTES, clean_image, image_path
@@ -175,6 +175,7 @@ def search_images(
                 by_type[label] = max(by_type.get(label, 0), score)
         classified_kind = kind
         kind = None
+        supported_kind = None
         ranked_types = sorted(((score, label) for label, score in by_type.items()), reverse=True)
         if ranked_types:
             first_score, first_type = ranked_types[0]
@@ -182,22 +183,18 @@ def search_images(
             verified_photo = first_score >= NEAR_DUPLICATE > next_score
             supported_guess = (
                 first_type == classified_kind
-                and first_score >= 0.55
+                and first_score >= 0.72
                 and first_score - next_score >= 0.12
             )
-            leading_match = (
-                classified_kind is None
-                and len(ranked_types) > 1
-                and first_score >= 0.46
-                and first_score - next_score >= 0.25
-            )
-            if verified_photo or supported_guess or leading_match:
+            if verified_photo:
                 kind = first_type
-            elif len(ranked_types) > 1:
-                refined_kind = refine_image_type(runtime, compact_jpeg(data, 1024))
-                if refined_kind in by_type and by_type[refined_kind] >= 0.15:
-                    kind = refined_kind
-                    refined = True
+            if supported_guess:
+                supported_kind = first_type
+        if kind is None:
+            db.commit()
+            kind = refine_image_type(runtime, compact_jpeg(data, 1024))
+            refined = kind in ITEM_TYPES
+            kind = kind or supported_kind
     elif item_kind is None and kind is None and prototypes:
         near_duplicate_types = {
             label
@@ -255,14 +252,25 @@ def search_images(
         for _, score, same_type, image in ranked
         if (post := visible.get(image.post_id)) is not None
     ]
+    type_results = []
+    if not results and kind in ITEM_TYPES:
+        aliases = ITEM_TYPES[kind][1]
+        matches = query.where(
+            or_(*(Post.title.icontains(alias, autoescape=True) for alias in aliases))
+        )
+        posts = db.scalars(
+            matches.options(selectinload(Post.images))
+            .order_by(Post.created_at.desc(), Post.id)
+            .limit(50)
+        )
+        type_results = [
+            ItemCard.from_post(post) for post in posts if title_item_type(post.title) == kind
+        ][:5]
     return ImageSearchResponse(
         results=results,
+        type_results=type_results,
         indexing_pending=pending,
-        detected_item_type=(
-            ITEM_TYPES[kind][0]
-            if item_kind is None
-            and kind in ITEM_TYPES
-            and any(item.same_item_type for item in results)
-            else None
-        ),
+        detected_item_type=ITEM_TYPES[kind][0]
+        if item_kind is None and kind in ITEM_TYPES
+        else None,
     )

@@ -73,6 +73,7 @@ export const aiApi = {
     if (itemKind) body.set('item_kind', itemKind)
     return apiRequest<{
       results: ImageMatch[]
+      type_results?: AIItem[]
       indexing_pending: boolean
       detected_item_type?: string | null
     }>('/api/ai/image-search', {

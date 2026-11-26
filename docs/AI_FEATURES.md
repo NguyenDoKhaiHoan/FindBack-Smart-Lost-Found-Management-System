@@ -82,9 +82,9 @@ Các yêu cầu POST gửi `Content-Length`. Tệp nhận JPEG, PNG và WebP, t�
 
 ## Demo
 
-Khi ảnh khó nhận diện, có thể chọn **Loại đồ vật** trước khi tìm để giới hạn kết quả. Chatbot đọc trạng thái yêu cầu và giờ hẹn bàn giao của tài khoản hiện tại khi người dùng hỏi trực tiếp.
+Khi ảnh khó nhận diện, có thể chọn **Loại đồ vật** trước khi tìm để giới hạn kết quả. Nếu nhận diện được loại đồ nhưng chưa có ảnh đủ giống, API trả thêm `type_results` để giao diện hiển thị các tin cùng loại. Chatbot đọc trạng thái yêu cầu và giờ hẹn bàn giao của tài khoản hiện tại khi người dùng hỏi trực tiếp.
 
-Trên Render, MobileNet xử lý lượt tìm ảnh ban đầu. Khi ảnh còn mơ hồ, bộ phân loại CLIP ONNX 4-bit đối chiếu các loại đồ đã định nghĩa. Bảng vector văn bản được tạo trước từ `PROMPTS` trong `image_types.py` bằng bộ mã hóa chữ OpenCLIP ViT-B/32 trọng số OpenAI. Bộ phân loại ảnh tải trọng số khi cần và chỉ gợi ý loại đồ có tin công khai làm căn cứ. [Bản ONNX](https://huggingface.co/Xenova/clip-vit-base-patch32/tree/6b7c523703ae26e39be4b03774966f8571c7f523/onnx)
+Trên Render, MobileNet xử lý lượt tìm ảnh ban đầu. Khi ảnh còn mơ hồ, bộ phân loại CLIP ONNX 4-bit đối chiếu các loại đồ đã định nghĩa. Bảng vector văn bản được tạo bằng bộ mã hóa chữ OpenCLIP ViT-B/32 trọng số OpenAI từ `PROMPTS` trong `image_types.py`, với mô tả bổ sung cho laptop nhìn từ mặt lưng và laptop gập nắp. Kết quả được lọc theo các tin công khai đang mở và bộ lọc của người dùng. [Bản ONNX](https://huggingface.co/Xenova/clip-vit-base-patch32/tree/6b7c523703ae26e39be4b03774966f8571c7f523/onnx)
 
 1. Đăng hai tin có cùng món đồ, một tin mất và một tin nhặt được. Đặt thời điểm nhặt sau thời điểm mất. Mở trang chi tiết để xem ảnh, điểm và lý do gợi ý.
 2. Vào **Khám phá → Tìm đồ bằng hình ảnh**. Chọn ảnh và bấm **Tìm đồ tương tự**. Có thể bắt đầu từ liên kết trong chi tiết tin có ảnh. Bộ lọc loại tin và danh mục trên trang khám phá cũng áp dụng cho kết quả ảnh.

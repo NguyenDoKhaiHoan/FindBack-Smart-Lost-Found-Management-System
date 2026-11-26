@@ -114,6 +114,7 @@ export function ImageSearch({
     search.variables.category === category &&
     search.variables.itemKind === itemKind
   const result = sameRequest ? search.data : undefined
+  const typeResults = result?.type_results ?? []
   return (
     <details className="panel ai-section ai-image-search" open={postImage ? true : undefined}>
       <summary>
@@ -184,7 +185,11 @@ export function ImageSearch({
         <p role="status">Đang cập nhật ảnh. Tìm lại để kiểm tra thêm ảnh.</p>
       )}
       {result && !result.indexing_pending && !result.results.length && (
-        <p>Chưa thấy ảnh đủ giống. Bạn có thể chọn loại đồ vật hoặc thử ảnh chụp rõ hơn.</p>
+        <p>
+          {typeResults.length
+            ? 'Chưa thấy ảnh đủ giống.'
+            : 'Chưa thấy ảnh đủ giống. Bạn có thể chọn loại đồ vật hoặc thử ảnh chụp rõ hơn.'}
+        </p>
       )}
       <div className="ai-card-grid">
         {result?.results.map((item) => (
@@ -199,6 +204,16 @@ export function ImageSearch({
           </AICard>
         ))}
       </div>
+      {typeResults.length > 0 && (
+        <>
+          <h3>Tin cùng loại đồ vật</h3>
+          <div className="ai-card-grid">
+            {typeResults.map((item) => (
+              <AICard key={item.item_id} item={item} />
+            ))}
+          </div>
+        </>
+      )}
     </details>
   )
 }

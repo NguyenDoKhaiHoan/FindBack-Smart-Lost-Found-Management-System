@@ -11,6 +11,7 @@ from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.modules.ai import images, matching
+from app.modules.ai.image_clip_onnx import best_type
 from app.modules.ai.image_mobilenet import classify
 from app.modules.ai.runtime import AIRuntime
 from app.modules.claims_returns.models.claim import ReturnRecord
@@ -67,6 +68,17 @@ def test_mobilenet_classify_does_not_guess_from_weak_or_tied_scores():
     wallet = [0.0] * 1000
     wallet[893] = 1.0
     assert classify(wallet) == "wallet"
+
+
+def test_clip_rear_laptop_prompt_is_scored_as_laptop():
+    prototypes = {
+        "laptop": [0.0, 1.0, 0.0],
+        "laptop_rear": [1.0, 0.0, 0.0],
+        "laptop_closed": [1.0, 0.0, 0.0],
+        "book": [0.0, 0.0, 1.0],
+    }
+    assert best_type([1.0, 0.0, 0.0], prototypes) == "laptop"
+    assert best_type([1.0, 0.0, 1.0], prototypes) is None
 
 
 def mock_openai(world, handler):
@@ -342,6 +354,28 @@ def test_render_image_search_uses_public_title_of_near_duplicate(world, monkeypa
     assert refined.status_code == 200, refined.text
     assert refined.json()["detected_item_type"] == "Điện thoại"
     assert [result["item_id"] for result in refined.json()["results"]] == [str(world.ids["found"])]
+
+
+def test_image_search_can_suggest_public_same_type_posts_without_similar_photos(world, monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    world.client.app.state.ai = AIRuntime(world.settings)
+    with world.factory() as db:
+        for key in ("found", "lost", "hidden", "closed"):
+            db.get(Post, world.ids[key]).title = "Laptop bạc"
+        db.get(Post, world.ids["unrelated"]).title = "Điện thoại bạc"
+        db.commit()
+
+    monkeypatch.setattr(images, "image_embeddings", lambda *args: (None, [], False))
+    monkeypatch.setattr(images, "refine_image_type", lambda runtime, data: "laptop")
+    response = world.client.post(
+        f"{BASE}/image-search", files={"file": png()}, data={"type": "FOUND"}
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["detected_item_type"] == "Laptop"
+    assert result["results"] == []
+    assert [item["item_id"] for item in result["type_results"]] == [str(world.ids["found"])]
+    assert "image_similarity" not in result["type_results"][0]
 
 
 @pytest.mark.parametrize(

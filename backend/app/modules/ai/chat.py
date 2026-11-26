@@ -705,6 +705,12 @@ def chat_image(
             if items
             else "Mình chưa tìm thấy ảnh đủ giống. Bạn có thể thử ảnh rõ hơn hoặc mô tả món đồ."
         )
+        if not items and search.type_results:
+            items = [
+                ChatItem.model_validate({**card.model_dump(), "reasons": ["Cùng loại đồ vật"]})
+                for card in search.type_results
+            ]
+            reply = "Mình chưa tìm thấy ảnh đủ giống. Đây là các tin cùng loại đồ vật."
         if search.detected_item_type:
             reply = f"Món đồ trong ảnh có thể là {search.detected_item_type.lower()}. {reply}"
         if search.indexing_pending:

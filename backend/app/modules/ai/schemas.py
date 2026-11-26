@@ -53,6 +53,7 @@ class ImageCard(ItemCard):
 
 class ImageSearchResponse(BaseModel):
     results: list[ImageCard]
+    type_results: list[ItemCard] = Field(default_factory=list)
     indexing_pending: bool = False
     detected_item_type: str | None = None
 
