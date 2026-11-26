@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { latLngBounds, type LatLngTuple } from 'leaflet'
 import {
   CircleMarker,
@@ -6,6 +6,7 @@ import {
   Polygon,
   Popup,
   TileLayer,
+  Tooltip,
   useMap,
   useMapEvents,
 } from 'react-leaflet'
@@ -25,7 +26,9 @@ const worldBounds = latLngBounds([
   [85, 180],
 ])
 const vietnamRings = vietnamBoundary.rings as LatLngTuple[][]
-const vietnamBounds = latLngBounds(vietnamRings.flat())
+// Extend the overview to the southeastern extent of Trường Sa.
+// https://dulichso.khanhhoa.gov.vn/article/bia-chu-quyen-quan-dao-truong-sa-tai-dao-song-tu-tay-va-dao-nam-yet-980
+const vietnamBounds = latLngBounds(vietnamRings.flat()).extend([6.8333, 117.3333])
 const vietnamMask: LatLngTuple[][] = [
   [
     [-85, -180],
@@ -35,6 +38,79 @@ const vietnamMask: LatLngTuple[][] = [
   ],
   ...vietnamRings,
 ]
+// Label anchors and selected islands from the published Vietnamese gazetteer.
+// https://www.mae.gov.vn/noidung/Lists/VBQPPL/Attachments/514/1_DanhMuc_TT_DiaDanh_BanHanh.pdf
+const archipelagos: { name: string; label: LatLngTuple; islands: LatLngTuple[] }[] = [
+  {
+    name: 'Quần đảo Hoàng Sa',
+    label: [16.4667, 112.225],
+    islands: [
+      [16.5356, 111.6061], // Hoàng Sa
+      [15.7858, 111.1975], // Tri Tôn
+      [16.8367, 112.3333], // Phú Lâm
+      [16.6717, 112.7267], // Linh Côn
+    ],
+  },
+  {
+    name: 'Quần đảo Trường Sa',
+    label: [8.8083, 114.005],
+    islands: [
+      [8.6467, 111.9183], // Trường Sa
+      [11.43, 114.3297], // Song Tử Tây
+      [10.18, 114.365], // Nam Yết
+      [9.8858, 114.3292], // Sinh Tồn
+      [8.9769, 113.7072], // Phan Vinh
+      [7.8933, 112.9197], // An Bang
+    ],
+  },
+]
+
+function VietnamOverview() {
+  return (
+    <>
+      <Polygon
+        positions={vietnamMask}
+        interactive={false}
+        className="hotspot-vietnam-mask"
+        pathOptions={{
+          fillColor: '#eef3f6',
+          fillOpacity: 1,
+          fillRule: 'evenodd',
+          stroke: false,
+        }}
+      />
+      {archipelagos.map(({ name, label, islands }) => (
+        <Fragment key={name}>
+          {islands.map((position) => (
+            <CircleMarker
+              key={position.join(',')}
+              center={position}
+              interactive={false}
+              radius={2.3}
+              pathOptions={{ stroke: false, fillColor: '#337087', fillOpacity: 0.9 }}
+            />
+          ))}
+          <CircleMarker
+            center={label}
+            interactive={false}
+            radius={0}
+            pathOptions={{ stroke: false, fill: false }}
+          >
+            <Tooltip
+              permanent
+              direction="bottom"
+              offset={[0, 6]}
+              opacity={1}
+              className="hotspot-archipelago-label"
+            >
+              {name}
+            </Tooltip>
+          </CircleMarker>
+        </Fragment>
+      ))}
+    </>
+  )
+}
 
 function Basemap() {
   const [failed, setFailed] = useState(false)
@@ -183,19 +259,7 @@ export function HotspotMap({
       maxBounds={worldBounds}
     >
       <Basemap />
-      {vietnamOnly && (
-        <Polygon
-          positions={vietnamMask}
-          interactive={false}
-          className="hotspot-vietnam-mask"
-          pathOptions={{
-            fillColor: '#eef3f6',
-            fillOpacity: 1,
-            fillRule: 'evenodd',
-            stroke: false,
-          }}
-        />
-      )}
+      {vietnamOnly && <VietnamOverview />}
       <FitMap points={points} region={region} vietnamOnly={vietnamOnly} />
       {showHeat && <HeatLayer points={points} />}
       {showMarkers &&
