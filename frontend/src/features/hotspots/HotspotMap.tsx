@@ -187,8 +187,8 @@ export function HotspotMap({
         <Polygon
           positions={vietnamMask}
           interactive={false}
+          className="hotspot-vietnam-mask"
           pathOptions={{
-            className: 'hotspot-vietnam-mask',
             fillColor: '#eef3f6',
             fillOpacity: 1,
             fillRule: 'evenodd',
