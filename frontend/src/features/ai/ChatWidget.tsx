@@ -26,6 +26,8 @@ const actions: Record<ChatAction, [string, string]> = {
   create_found: ['/dang-tin?loai=found', 'Đăng tin nhặt được đồ'],
   explore: ['/kham-pha', 'Mở trang khám phá'],
   guide: ['/huong-dan', 'Xem hướng dẫn'],
+  hotspots: ['/ban-do-that-lac', 'Mở bản đồ thất lạc'],
+  hotspots_admin: ['/quan-tri/phan-tich-that-lac', 'Mở phân tích thất lạc'],
 }
 
 const followUps = [

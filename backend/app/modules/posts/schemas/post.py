@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.matching.schemas.contracts import Color
+from app.modules.posts.services.catalog import HotspotZone
 
 from .post_image import PostImageResponse
 
@@ -30,6 +31,7 @@ class _PostEditable(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     item_name: str | None = Field(default=None, min_length=1, max_length=100)
+    hotspot_zone: HotspotZone | None = None
 
     @field_validator("event_time", check_fields=False)
     @classmethod
@@ -136,6 +138,12 @@ class PostListResponse(BaseModel):
     page_size: int = Field(ge=1)
     total: int = Field(ge=0)
     total_pages: int = Field(ge=0)
+
+
+class PostHotspotLocation(BaseModel):
+    hotspot_zone: HotspotZone
+    latitude: float
+    longitude: float
 
 
 class PostListQuery(BaseModel):

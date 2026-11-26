@@ -30,7 +30,8 @@ export interface Draft {
   confidence_note: string
 }
 
-export type ChatAction = 'create_lost' | 'create_found' | 'explore' | 'guide'
+export type ChatAction =
+  'create_lost' | 'create_found' | 'explore' | 'guide' | 'hotspots' | 'hotspots_admin'
 
 export interface ChatReview {
   topic: 'why' | 'location' | 'time' | 'description'

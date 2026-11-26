@@ -61,6 +61,7 @@ class Post(Base):
     color_code: Mapped[str | None] = mapped_column(String(20))
     latitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
     longitude: Mapped[float | None] = mapped_column(Numeric(9, 6))
+    hotspot_zone: Mapped[str | None] = mapped_column(String(16))
     search_text: Mapped[str | None] = mapped_column(Text)
     ai_embedding_key: Mapped[str | None] = mapped_column(String(64), deferred=True)
     ai_embedding: Mapped[list[float] | None] = mapped_column(JSON, deferred=True)

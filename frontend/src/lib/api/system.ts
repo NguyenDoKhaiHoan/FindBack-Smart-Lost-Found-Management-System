@@ -92,6 +92,9 @@ export interface Post extends PostListItem {
 export interface PostInput {
   category_id: string
   item_name?: string | null
+  hotspot_zone?: string | null
+  latitude?: number | null
+  longitude?: number | null
   title: string
   description: string
   location: string

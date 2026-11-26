@@ -5,10 +5,11 @@ from fastapi import APIRouter, File, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.core.security import CurrentUser, DatabaseSession
-from app.modules.posts.models.post import PostImage
+from app.modules.posts.models.post import Post, PostImage
 from app.modules.posts.repositories.posts import PostRepository
 from app.modules.posts.schemas.post import (
     PostCreate,
+    PostHotspotLocation,
     PostListQuery,
     PostListResponse,
     PostResponse,
@@ -52,6 +53,22 @@ def patch_post(
     id: UUID, payload: PostUpdate, db: DatabaseSession, user: CurrentUser
 ) -> PostResponse:
     return listings.edit_post(db, id, user.id, payload)
+
+
+@router.get("/posts/{id}/hotspot-location")
+def post_hotspot_location(
+    id: UUID, db: DatabaseSession, user: CurrentUser
+) -> PostHotspotLocation | None:
+    post = db.get(Post, id)
+    if post is None or post.deleted_at is not None or post.owner_id != user.id:
+        raise DomainError(404, "POST_NOT_FOUND", "Post not found")
+    if post.hotspot_zone is None or post.latitude is None or post.longitude is None:
+        return None
+    return PostHotspotLocation(
+        hotspot_zone=post.hotspot_zone,
+        latitude=float(post.latitude),
+        longitude=float(post.longitude),
+    )
 
 
 @router.delete("/posts/{id}", status_code=204)

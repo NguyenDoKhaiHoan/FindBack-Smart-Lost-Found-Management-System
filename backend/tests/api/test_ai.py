@@ -547,6 +547,10 @@ def test_assistant_search_only_returns_real_visible_open_posts(world):
             "get_my_items",
             "get_my_claims",
             "get_matching_items",
+            "get_lost_item_hotspots",
+            "get_hotspot_statistics",
+            "get_top_lost_categories",
+            "get_peak_lost_hours",
             "show_guide",
             "refuse_request",
         }

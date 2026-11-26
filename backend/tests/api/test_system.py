@@ -18,7 +18,7 @@ def test_integrated_openapi_lists_all_business_operations(world):
     validate(spec)
     assert (
         sum(len(operations) for path, operations in spec["paths"].items() if path.startswith(API))
-        == 39
+        == 40
     )
     assert {
         (path, method)
@@ -31,7 +31,14 @@ def test_integrated_openapi_lists_all_business_operations(world):
         ("/api/ai/chat/image-search", "post"),
         ("/api/ai/generate-post", "post"),
         ("/api/ai/chat", "post"),
+        ("/api/ai/hotspots", "get"),
+        ("/api/ai/hotspots/heatmap", "get"),
+        ("/api/ai/hotspots/statistics", "get"),
+        ("/api/ai/hotspots/{cluster_id}", "get"),
     }
+    assert spec["paths"]["/api/admin/ai/hotspots/config"]["patch"]["security"] == [
+        {"BearerAuth": []}
+    ]
     assert f"{API}/auth/refresh" in spec["paths"]
     assert f"{API}/returns/{{id}}/handover" in spec["paths"]
     assert f"{API}/admin/statistics" in spec["paths"]

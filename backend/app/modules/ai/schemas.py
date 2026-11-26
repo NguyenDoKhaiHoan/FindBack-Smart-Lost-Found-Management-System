@@ -110,7 +110,10 @@ class ChatMap(BaseModel):
 class ChatResult(BaseModel):
     reply: str
     related_items: list[ChatItem] = Field(default_factory=list)
-    action: Literal["create_lost", "create_found", "explore", "guide"] | None = None
+    action: (
+        Literal["create_lost", "create_found", "explore", "guide", "hotspots", "hotspots_admin"]
+        | None
+    ) = None
     can_select_item: bool = False
     can_review_items: bool = False
     map_place: ChatMap | None = None

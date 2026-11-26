@@ -38,6 +38,9 @@ const Notifications = lazy(() =>
 const Admin = lazy(() =>
   import('../features/admin/AdminPage').then((m) => ({ default: m.AdminPage })),
 )
+const Hotspots = lazy(() =>
+  import('../features/hotspots/HotspotDashboard').then((m) => ({ default: m.PublicHotspotsPage })),
+)
 const Guide = lazy(() =>
   import('../features/profile/AccountPages').then((m) => ({ default: m.GuidePage })),
 )
@@ -86,6 +89,7 @@ export function App() {
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
           <Route path="kham-pha" element={<Explore />} />
+          <Route path="ban-do-that-lac" element={<Hotspots />} />
           <Route path="do-vat/:id" element={<ItemDetail />} />
           <Route path="huong-dan" element={<Guide />} />
           <Route path="nguon-anh" element={<PhotoCreditsPage />} />

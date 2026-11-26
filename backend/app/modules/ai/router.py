@@ -111,11 +111,11 @@ def drafts(
 
 @router.post("/chat")
 def assistant(
-    body: ChatInput, db: DatabaseSession, user: CurrentUser, runtime: Runtime
+    body: ChatInput, db: DatabaseSession, user: CurrentUser, runtime: Runtime, request: Request
 ) -> ChatResponse:
     runtime.require_enabled("chatbot")
     runtime.throttle("chatbot", str(user.id))
-    return chat(db, runtime, user.id, body)
+    return chat(db, runtime, user, body, request.app.state.hotspots)
 
 
 @router.post("/chat/image-search")

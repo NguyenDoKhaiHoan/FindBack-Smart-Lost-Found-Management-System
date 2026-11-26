@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { lazy, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, NavLink, useMatch } from 'react-router-dom'
 import { ApiFeedback, Pagination } from '../../components/ui/live'
 import { EmptyState, PageHeading } from '../../components/ui/shared'
 import { moderationApi, type ReportStatus, type Statistics } from '../../lib/api/system'
 import { useAccount } from '../auth/useAccount'
+
+const HotspotDashboard = lazy(() =>
+  import('../hotspots/HotspotDashboard').then((module) => ({ default: module.HotspotDashboard })),
+)
 
 const labels: Record<keyof Statistics, string> = {
   users: 'Tài khoản',
@@ -25,9 +29,10 @@ const reportLabels: Record<ReportStatus, string> = {
 
 export function AdminPage() {
   const account = useAccount()
+  const hotspots = useMatch('/quan-tri/phan-tich-that-lac')
   return (
     <div className="container page-container">
-      <PageHeading title="Quản trị FindBack" />
+      <PageHeading title={hotspots ? 'Phân tích điểm nóng thất lạc' : 'Quản trị FindBack'} />
       <ApiFeedback
         pending={account.isPending}
         error={account.error}
@@ -35,7 +40,17 @@ export function AdminPage() {
       />
       {account.data &&
         (account.data.role === 'ADMIN' ? (
-          <AdminWorkspace />
+          <>
+            <nav className="live-actions hotspot-admin-nav" aria-label="Quản trị FindBack">
+              <NavLink end to="/quan-tri" className="button button-secondary">
+                Tổng quan
+              </NavLink>
+              <NavLink to="/quan-tri/phan-tich-that-lac" className="button button-secondary">
+                Phân tích thất lạc
+              </NavLink>
+            </nav>
+            {hotspots ? <HotspotDashboard admin /> : <AdminWorkspace />}
+          </>
         ) : (
           <EmptyState
             title="Bạn không có quyền quản trị"

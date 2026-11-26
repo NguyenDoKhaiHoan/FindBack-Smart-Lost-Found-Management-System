@@ -16,6 +16,9 @@ from app.modules.ai.router import router as ai_router
 from app.modules.ai.runtime import AIRuntime
 from app.modules.claims_returns.routers.claims import router as claims_router
 from app.modules.claims_returns.routers.returns import router as returns_router
+from app.modules.hotspots.router import admin as admin_hotspots_router
+from app.modules.hotspots.router import router as hotspots_router
+from app.modules.hotspots.service import HotspotService
 from app.modules.identity.routers import router as identity_router
 from app.modules.matching.routers.matches import router as matching_router
 from app.modules.notifications_admin.routers import admin_posts_router, notifications_router
@@ -55,6 +58,7 @@ def create_app(settings: Settings | None = None, *, engine=None) -> FastAPI:
     app.state.settings = settings
     app.state.session_factory = make_session_factory(database_engine)
     app.state.ai = AIRuntime(settings)
+    app.state.hotspots = HotspotService(demo=settings.app_env == "hotspot-demo")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -82,6 +86,8 @@ def create_app(settings: Settings | None = None, *, engine=None) -> FastAPI:
         posts_router,
         matching_router,
         ai_router,
+        hotspots_router,
+        admin_hotspots_router,
         claims_router,
         returns_router,
         notifications_router,

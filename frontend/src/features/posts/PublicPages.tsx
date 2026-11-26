@@ -24,14 +24,10 @@ import { useSession } from '../auth/session'
 import { ImageSearch, SuggestedMatches } from '../ai/AISearch'
 import { PostDraftAssistant } from '../ai/PostDraftAssistant'
 import type { Draft } from '../ai/api'
+import type { HotspotPin } from '../hotspots/api'
+import { HotspotPinEditor } from '../hotspots/HotspotPinEditor'
+import { regions as locations } from '../hotspots/geography'
 import { PostCard } from './PostCard'
-
-const locations = [
-  ['VN-HN', 'Hà Nội'],
-  ['VN-SG', 'TP. Hồ Chí Minh'],
-  ['VN-DN', 'Đà Nẵng'],
-  ['OTHER', 'Khu vực khác'],
-]
 
 const colors = [
   ['BLACK', 'Đen'],
@@ -417,6 +413,9 @@ function PostEditor({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const editor = useRef<HTMLFormElement>(null)
+  const [type, setType] = useState(post?.type ?? initialType)
+  const [locationCode, setLocationCode] = useState(post?.location_code ?? 'OTHER')
+  const [pin, setPin] = useState<HotspotPin | null | 'choosing'>()
   const [categoryId, setCategoryId] = useState(post?.category_id ?? '')
   const [customName, setCustomName] = useState(post?.item_name ?? '')
   const otherCategory = categories.find((category) => category.name === 'Khác')
@@ -435,6 +434,7 @@ function PostEditor({
           : (await postsApi.create({ ...body, type })).id)
       setSavedId(id)
       void queryClient.invalidateQueries({ queryKey: ['posts'] })
+      void queryClient.invalidateQueries({ queryKey: ['hotspots'] })
       const remaining = [...files]
       try {
         while (remaining.length > 0) {
@@ -470,14 +470,21 @@ function PostEditor({
   }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (save.isPending || fileError) return
+    if (save.isPending || fileError || (type === 'LOST' && pin === 'choosing')) return
     const form = new FormData(event.currentTarget)
     const value = (key: string) => String(form.get(key) ?? '').trim()
     const itemName = isOtherCategory ? value('item_name') : ''
+    const pinChange =
+      type === 'LOST' && pin !== 'choosing'
+        ? pin === null
+          ? { hotspot_zone: null, latitude: null, longitude: null }
+          : pin
+        : undefined
     const body: PostInput = {
       title: value('title'),
       category_id: value('category_id'),
       ...(itemName || post?.item_name ? { item_name: itemName || null } : {}),
+      ...pinChange,
       location: value('location'),
       location_code: value('location_code'),
       description: value('description'),
@@ -486,7 +493,7 @@ function PostEditor({
       brand: value('brand') || null,
       material: value('material') || null,
     }
-    save.mutate({ body, type: value('type') === 'FOUND' ? 'FOUND' : 'LOST' })
+    save.mutate({ body, type })
   }
   return (
     <form className="panel live-stack" onSubmit={submit} ref={editor}>
@@ -494,7 +501,14 @@ function PostEditor({
         {!post && (
           <label className="field">
             Loại tin
-            <select name="type" defaultValue={initialType}>
+            <select
+              name="type"
+              value={type}
+              onChange={(event) => {
+                setType(event.currentTarget.value === 'FOUND' ? 'FOUND' : 'LOST')
+                setPin(undefined)
+              }}
+            >
               <option value="LOST">Tôi bị mất đồ</option>
               <option value="FOUND">Tôi nhặt được đồ</option>
             </select>
@@ -534,7 +548,11 @@ function PostEditor({
         )}
         <label className="field">
           Khu vực
-          <select name="location_code" defaultValue={post?.location_code ?? 'OTHER'}>
+          <select
+            name="location_code"
+            value={locationCode}
+            onChange={(event) => setLocationCode(event.currentTarget.value)}
+          >
             {locations.map(([code, name]) => (
               <option key={code} value={code}>
                 {name}
@@ -546,6 +564,9 @@ function PostEditor({
           Địa điểm
           <input name="location" required maxLength={255} defaultValue={post?.location ?? ''} />
         </label>
+        {type === 'LOST' && (
+          <HotspotPinEditor postId={post?.id} region={locationCode} onChange={setPin} />
+        )}
         <label className="field">
           Thời điểm mất hoặc nhặt được
           <input
@@ -636,7 +657,7 @@ function PostEditor({
       <div className="live-actions">
         <button
           className="button button-primary"
-          disabled={save.isPending || Boolean(fileError)}
+          disabled={save.isPending || Boolean(fileError) || (type === 'LOST' && pin === 'choosing')}
           type="submit"
         >
           {save.isPending

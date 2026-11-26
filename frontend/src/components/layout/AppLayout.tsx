@@ -26,6 +26,7 @@ export function AppLayout() {
               Trang chủ
             </NavLink>
             <NavLink to="/kham-pha">Khám phá đồ thất lạc</NavLink>
+            <NavLink to="/ban-do-that-lac">Bản đồ thất lạc</NavLink>
             <NavLink to="/huong-dan">Cách hoạt động</NavLink>
           </nav>
           <div className="header-actions">
@@ -76,6 +77,9 @@ export function AppLayout() {
             </NavLink>
             <NavLink to="/kham-pha" onClick={() => setOpen(false)}>
               Khám phá đồ thất lạc
+            </NavLink>
+            <NavLink to="/ban-do-that-lac" onClick={() => setOpen(false)}>
+              Bản đồ thất lạc
             </NavLink>
             <NavLink to="/huong-dan" onClick={() => setOpen(false)}>
               Cách hoạt động

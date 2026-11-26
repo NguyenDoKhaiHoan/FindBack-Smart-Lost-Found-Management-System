@@ -15,6 +15,7 @@ from app.modules.ai.chat_guard import (
     normalized_question,
     redact_sensitive_text,
 )
+from app.modules.ai.chat_hotspots import HOTSPOT_TOOLS, HotspotArgs, hotspot_reply
 from app.modules.ai.chat_places import DirectionsArgs, directions, public_posts_at, safe_map_place
 from app.modules.ai.image_types import title_item_type
 from app.modules.ai.images import NEAR_DUPLICATE, search_images
@@ -30,6 +31,8 @@ from app.modules.ai.schemas import (
     ChatResult,
     ChatReview,
 )
+from app.modules.hotspots.service import HotspotService
+from app.modules.identity.models.user import User
 from app.modules.matching.schemas.contracts import Color
 from app.modules.matching.services.search import SearchQuery, search_posts
 from app.modules.posts.models.post import Post
@@ -201,6 +204,7 @@ class EmptyArgs(AIInput):
 
 
 TOOL_SPECS = {
+    **HOTSPOT_TOOLS,
     "search_lost_items": (SearchArgs, "Tìm tin người khác báo mất khi người dùng nhặt được đồ."),
     "search_found_items": (SearchArgs, "Tìm tin nhặt được dựa trên món đồ người dùng mô tả."),
     "search_public_items": (SearchArgs, "Tìm cả tin mất và tin nhặt khi chưa chỉ rõ loại tin."),
@@ -519,12 +523,14 @@ def my_items(
 def execute_tool(
     db: Session,
     runtime: AIRuntime,
-    user_id: UUID,
+    user: User,
+    hotspots: HotspotService,
     context: Conversation,
     name: str,
     arguments: str,
     message: str,
 ) -> ChatResult:
+    user_id = user.id
     spec = TOOL_SPECS.get(name)
     if spec is None:
         raise DomainError(502, "AI_INVALID_OUTPUT", "Unknown assistant action")
@@ -540,6 +546,10 @@ def execute_tool(
         return compose_answer(runtime, context, message, result)
     if isinstance(args, ClaimStatusArgs):
         return claim_status(db, user_id, args)
+    if isinstance(args, HotspotArgs):
+        return hotspot_reply(
+            db, hotspots, "admin" if user.role == "ADMIN" else "public", name, args
+        )
     if isinstance(args, SearchArgs | LocationArgs | DirectionsArgs):
         for value in args.model_dump().values():
             if isinstance(value, str) and (reason := local_refusal(value)):
@@ -579,7 +589,10 @@ def execute_tool(
     return compose_answer(runtime, context, message, ChatResult(reply=reply, action=action))
 
 
-def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> ChatResponse:
+def chat(
+    db: Session, runtime: AIRuntime, user: User, body: ChatInput, hotspots: HotspotService
+) -> ChatResponse:
+    user_id = user.id
     actor = str(user_id)
     message = redact_sensitive_text(body.message)
     with runtime.conversation(body.conversation_id, actor) as (conversation_id, context):
@@ -656,6 +669,16 @@ def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> Cha
                     "Giữ tên địa điểm thực sự có trong câu hỏi hoặc lịch sử. "
                     "Ví dụ 'từ Hà Nội đến Nguyễn Đình Chiểu cách bao xa' dùng origin 'Hà Nội', "
                     "destination 'Nguyễn Đình Chiểu'. Dùng null cho điểm chưa rõ. "
+                    "Câu hỏi về lịch sử báo mất dùng get_lost_item_hotspots nếu hỏi địa điểm "
+                    "hoặc điểm nóng. 'Nơi nào' hay 'khu vực nào báo mất nhiều nhất' luôn hỏi "
+                    "địa điểm, kể cả khi có mốc 30 ngày. Dùng get_hotspot_statistics cho câu "
+                    "hỏi tổng số báo cáo hoặc tổng số cụm, "
+                    "get_top_lost_categories nếu hỏi thường mất món gì, "
+                    "get_peak_lost_hours nếu hỏi giờ thường mất. "
+                    "Dùng period 7, 30, 90 theo câu hỏi hoặc null nếu không nêu. Dùng location_id "
+                    "cho thành phố hoặc zone cho nhóm địa điểm như thư viện. Đặt unsupported_place "
+                    "nếu câu hỏi chỉ đích danh một địa điểm không có bộ lọc phù hợp. "
+                    "Đặt managed_only khi người dùng hỏi riêng phạm vi được phân công quản lý. "
                     "Nếu người dùng muốn đăng tin, dùng show_guide."
                 ),
                 input=[*context.history, {"role": "user", "content": message}],
@@ -669,7 +692,7 @@ def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> Cha
                 raise DomainError(502, "AI_INVALID_OUTPUT", "Expected one assistant action")
             operation = calls[0].name
             result = execute_tool(
-                db, runtime, user_id, context, operation, calls[0].arguments, message
+                db, runtime, user, hotspots, context, operation, calls[0].arguments, message
             )
 
         if result.reply not in REFUSALS.values():
@@ -679,6 +702,8 @@ def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> Cha
             history_reply = (
                 "Đã kiểm tra yêu cầu nhận đồ của tài khoản hiện tại."
                 if operation == "get_my_claims"
+                else "Đã xem thống kê điểm nóng theo quyền của phiên hiện tại."
+                if operation in HOTSPOT_TOOLS
                 else redact_sensitive_text(result.reply)
             )
             context.history.append({"role": "assistant", "content": history_reply})

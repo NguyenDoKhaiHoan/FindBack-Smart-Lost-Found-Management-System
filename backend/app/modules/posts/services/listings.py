@@ -54,6 +54,7 @@ def create_post(db: Session, payload: PostCreate, owner_id: UUID) -> PostRespons
     values = payload.model_dump()
     values["type"] = payload.type.value
     check_values(db, values)
+    normalize_hotspot_location(values)
     values["location_code"] = values["location_code"] or "OTHER"
     post = Post(owner_id=owner_id, images=[], **values)
     update_search_text(post)
@@ -86,6 +87,21 @@ def update_search_text(post: Post) -> None:
     post.search_text = f" {' '.join(words)} "
 
 
+def normalize_hotspot_location(values: dict, post: Post | None = None) -> None:
+    zone = values.get("hotspot_zone", post.hotspot_zone if post else None)
+    if zone is None:
+        return
+    lat = values.get("latitude", post.latitude if post else None)
+    lon = values.get("longitude", post.longitude if post else None)
+    if (post.type if post else values["type"]) != "LOST" or lat is None or lon is None:
+        raise DomainError(422, "INVALID_HOTSPOT_LOCATION", "Choose a map pin for a lost-item post")
+    if {"hotspot_zone", "latitude", "longitude"} & values.keys():
+        lat, lon = round(lat, 3), round(lon, 3)
+        if (lat, lon) == (0, 0):
+            raise DomainError(422, "INVALID_HOTSPOT_LOCATION", "Choose a valid map pin")
+        values.update(latitude=lat, longitude=lon)
+
+
 def lock_editable_post(
     db: Session, post_id: UUID, owner_id: UUID, *, check_claims: bool = True
 ) -> Post:
@@ -111,6 +127,7 @@ def edit_post(db: Session, post_id: UUID, owner_id: UUID, payload: PostUpdate) -
     post = lock_editable_post(db, post_id, owner_id)
     values = payload.model_dump(exclude_unset=True)
     check_values(db, values)
+    normalize_hotspot_location(values, post)
     if "location_code" in values and values["location_code"] is None:
         values["location_code"] = "OTHER"
     for name, value in values.items():
