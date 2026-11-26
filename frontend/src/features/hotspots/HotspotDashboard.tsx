@@ -75,6 +75,16 @@ export function HotspotDashboard({ admin = false }: { admin?: boolean }) {
     queryFn: ({ signal }) => postsApi.categories(signal),
   })
   const areaQuery = fold(area.trim())
+  const vietnamOnly =
+    !areaQuery &&
+    !(
+      filters.period ||
+      filters.category_id ||
+      filters.location_id ||
+      filters.zone ||
+      filters.start_date ||
+      filters.end_date
+    )
   const clusters = useMemo(
     () =>
       analysis.data?.clusters.filter((cluster) =>
@@ -287,6 +297,7 @@ export function HotspotDashboard({ admin = false }: { admin?: boolean }) {
                 <HotspotMap
                   points={areaQuery ? clusters : (analysis.data?.heatmap ?? emptyPoints)}
                   clusters={clusters}
+                  vietnamOnly={vietnamOnly}
                   selected={selected}
                   region={filters.location_id}
                   showHeat={showHeat}

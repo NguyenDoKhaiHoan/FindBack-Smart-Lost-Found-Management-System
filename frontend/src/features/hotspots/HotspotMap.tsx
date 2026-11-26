@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react'
-import type { LatLngTuple } from 'leaflet'
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { latLngBounds, type LatLngTuple } from 'leaflet'
+import {
+  CircleMarker,
+  MapContainer,
+  Polygon,
+  Popup,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
 import simpleheat from 'simpleheat'
 import { density, regionCenter, regionZoom } from './geography'
 import type { Cluster, Point } from './api'
+import vietnamBoundary from './vietnam-boundary.json'
 import 'leaflet/dist/leaflet.css'
 import './hotspots.css'
 
@@ -11,6 +20,21 @@ const tileUrl =
   import.meta.env.VITE_HOTSPOT_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const attribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+const worldBounds = latLngBounds([
+  [-85, -180],
+  [85, 180],
+])
+const vietnamRings = vietnamBoundary.rings as LatLngTuple[][]
+const vietnamBounds = latLngBounds(vietnamRings.flat())
+const vietnamMask: LatLngTuple[][] = [
+  [
+    [-85, -180],
+    [-85, 180],
+    [85, 180],
+    [85, -180],
+  ],
+  ...vietnamRings,
+]
 
 function Basemap() {
   const [failed, setFailed] = useState(false)
@@ -31,27 +55,54 @@ function Basemap() {
   )
 }
 
-function FitMap({ points, region }: { points: Point[]; region: string }) {
+function FitMap({
+  points,
+  region,
+  vietnamOnly,
+}: {
+  points: Point[]
+  region: string
+  vietnamOnly: boolean
+}) {
   const map = useMap()
   useEffect(() => {
+    if (!vietnamOnly) return
+    const fitVietnam = () => {
+      map.setMinZoom(0)
+      map.setMaxBounds(vietnamBounds.pad(0.12))
+      map.fitBounds(vietnamBounds, { padding: [24, 24], animate: false })
+      map.setMinZoom(map.getZoom())
+    }
+    fitVietnam()
+    map.on('resize', fitVietnam)
+    return () => {
+      map.off('resize', fitVietnam)
+    }
+  }, [map, vietnamOnly])
+
+  useEffect(() => {
+    if (vietnamOnly) return
+    map.setMinZoom(0)
+    map.setMaxBounds(worldBounds)
     if (points.length) {
       const bounds = points.map(({ latitude, longitude }): LatLngTuple => [latitude, longitude])
       map.fitBounds(bounds, { padding: [34, 34], maxZoom: 15, animate: false })
     } else {
       map.setView(regionCenter(region), region ? regionZoom(region) : 6, { animate: false })
     }
-  }, [map, points, region])
+  }, [map, points, region, vietnamOnly])
   return null
 }
 
 function HeatLayer({ points }: { points: Point[] }) {
   const map = useMap()
   useEffect(() => {
+    const overlay = map.getPane('overlayPane')
     const canvas = document.createElement('canvas')
-    if (!canvas.getContext('2d', { willReadFrequently: true })) return
+    if (!overlay || !canvas.getContext('2d', { willReadFrequently: true })) return
     canvas.className = 'hotspot-heat'
     canvas.setAttribute('aria-hidden', 'true')
-    map.getContainer().appendChild(canvas)
+    overlay.appendChild(canvas)
     const heat = new simpleheat(canvas).radius(32, 27).max(1).gradient({
       0.2: density.low.color,
       0.48: density.medium.color,
@@ -62,6 +113,9 @@ function HeatLayer({ points }: { points: Point[] }) {
     const draw = () => {
       const { x, y } = map.getSize()
       if (!x || !y) return
+      const topLeft = map.containerPointToLayerPoint([0, 0])
+      canvas.style.left = `${topLeft.x}px`
+      canvas.style.top = `${topLeft.y}px`
       if (canvas.width !== x || canvas.height !== y) {
         canvas.width = x
         canvas.height = y
@@ -100,6 +154,7 @@ export function HotspotMap({
   points,
   clusters,
   region,
+  vietnamOnly,
   selected,
   showHeat,
   showMarkers,
@@ -108,6 +163,7 @@ export function HotspotMap({
   points: Point[]
   clusters: Cluster[]
   region: string
+  vietnamOnly: boolean
   selected: string | null
   showHeat: boolean
   showMarkers: boolean
@@ -121,15 +177,26 @@ export function HotspotMap({
       aria-label="Bản đồ nhiệt thất lạc"
       scrollWheelZoom={false}
       zoomAnimation={false}
+      zoomSnap={0.25}
       fadeAnimation={false}
       maxBoundsViscosity={1}
-      maxBounds={[
-        [-85, -180],
-        [85, 180],
-      ]}
+      maxBounds={worldBounds}
     >
       <Basemap />
-      <FitMap points={points} region={region} />
+      {vietnamOnly && (
+        <Polygon
+          positions={vietnamMask}
+          interactive={false}
+          pathOptions={{
+            className: 'hotspot-vietnam-mask',
+            fillColor: '#eef3f6',
+            fillOpacity: 1,
+            fillRule: 'evenodd',
+            stroke: false,
+          }}
+        />
+      )}
+      <FitMap points={points} region={region} vietnamOnly={vietnamOnly} />
       {showHeat && <HeatLayer points={points} />}
       {showMarkers &&
         clusters.map((cluster) => (

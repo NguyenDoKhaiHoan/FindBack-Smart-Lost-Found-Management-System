@@ -7,7 +7,9 @@ import type { Analysis } from './api'
 import { PublicHotspotsPage } from './HotspotDashboard'
 
 vi.mock('./HotspotMap', () => ({
-  HotspotMap: () => <div aria-label="Bản đồ thử nghiệm" />,
+  HotspotMap: ({ vietnamOnly }: { vietnamOnly: boolean }) => (
+    <div aria-label={vietnamOnly ? 'Khung Việt Nam' : 'Khung theo bộ lọc'} />
+  ),
 }))
 
 const empty: Analysis = {
@@ -71,6 +73,20 @@ describe('public hotspot map', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Thử lại' }))
     expect(await screen.findByText('Chưa có cụm đủ dữ liệu')).toBeVisible()
     expect(requests).toBe(2)
+  })
+
+  it('shows the Vietnam-only view before filters and after resetting them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string) => Response.json(path.includes('categories') ? [] : empty)),
+    )
+    show()
+    expect(await screen.findByLabelText('Khung Việt Nam')).toBeVisible()
+    const region = screen.getByRole('combobox', { name: 'Khu vực' })
+    await userEvent.selectOptions(region, 'VN-HN')
+    expect(await screen.findByLabelText('Khung theo bộ lọc')).toBeVisible()
+    await userEvent.selectOptions(region, '')
+    expect(await screen.findByLabelText('Khung Việt Nam')).toBeVisible()
   })
 
   it('passes the chosen period and shows related public links', async () => {
