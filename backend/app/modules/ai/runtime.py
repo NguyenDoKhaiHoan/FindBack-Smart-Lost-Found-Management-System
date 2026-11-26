@@ -53,6 +53,8 @@ class AIRuntime:
             self.image_backend = "mobilenet" if getenv("RENDER") == "true" else "openclip"
         self.image_model = None
         self.image_prototypes: dict[str, list[float]] = {}
+        self.image_classifier = None
+        self.image_classifier_failed = False
 
     def require_enabled(self, feature: str) -> None:
         if not getattr(self.settings, f"ai_{feature}_enabled"):

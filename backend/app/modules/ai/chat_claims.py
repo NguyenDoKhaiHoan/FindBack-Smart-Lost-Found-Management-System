@@ -26,19 +26,16 @@ RELATION_LABELS = {
 
 class ClaimStatusArgs(AIInput):
     relation: Literal["claimant", "reviewer", "all"]
-    status: ClaimStatus | None
     handover: bool
 
 
 def claim_status(db: Session, actor: UUID, args: ClaimStatusArgs) -> ChatResult:
-    status = args.status or (ClaimStatus.APPROVED if args.handover else None)
     page_size = 5
-    query = ClaimQuery(relation=args.relation, status=status, page_size=page_size)
+    query = ClaimQuery(relation=args.relation, page_size=page_size)
     claims = ClaimRepository(db).list_related(actor, query)
     relation = RELATION_LABELS[args.relation]
-    status_label = f" ở trạng thái {STATUS_LABELS[status]}" if status is not None else ""
     if not claims:
-        return ChatResult(reply=f"Mình chưa thấy yêu cầu nhận đồ {relation}{status_label}.")
+        return ChatResult(reply=f"Mình chưa thấy yêu cầu nhận đồ {relation}.")
 
     titles = dict(
         db.execute(
@@ -47,7 +44,8 @@ def claim_status(db: Session, actor: UUID, args: ClaimStatusArgs) -> ChatResult:
             .with_only_columns(Post.id, Post.title)
         ).all()
     )
-    lines = [f"Yêu cầu nhận đồ {relation}{status_label} gần nhất."]
+    heading = "Lịch bàn giao của các yêu cầu" if args.handover else "Yêu cầu nhận đồ"
+    lines = [f"{heading} {relation} gần nhất."]
     for index, claim in enumerate(claims[:page_size], 1):
         title = titles.get(claim.found_post_id) or "Tin nhận đồ"
         detail = STATUS_LABELS[claim.status]

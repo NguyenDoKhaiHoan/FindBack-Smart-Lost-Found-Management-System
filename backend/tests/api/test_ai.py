@@ -326,6 +326,23 @@ def test_render_image_search_uses_public_title_of_near_duplicate(world, monkeypa
     assert empty.json()["results"] == []
     assert empty.json()["detected_item_type"] is None
 
+    # Ambiguous input can use a second classifier, but the result must still be a
+    # public candidate of the predicted type with enough visual similarity.
+    weak = [0.0] * 1000
+    weak[400] = 1.0
+    different_photo = [*weak, *([40, 80, 120] * 64), *([1, 0] * 32)]
+
+    def ambiguous(db, runtime, query, data):
+        _, candidates, pending = embeddings(db, runtime, query, data)
+        return different_photo, candidates, pending
+
+    monkeypatch.setattr(images, "image_embeddings", ambiguous)
+    monkeypatch.setattr(images, "refine_image_type", lambda runtime, data: "phone")
+    refined = world.client.post(f"{BASE}/image-search", files={"file": png()})
+    assert refined.status_code == 200, refined.text
+    assert refined.json()["detected_item_type"] == "Điện thoại"
+    assert [result["item_id"] for result in refined.json()["results"]] == [str(world.ids["found"])]
+
 
 @pytest.mark.parametrize(
     ("payload", "status"),
@@ -907,9 +924,7 @@ def test_chat_reads_only_related_claim_status_and_handover_time(world):
     def handler(request):
         assert "Private meeting note" not in request.content.decode()
         assert "15:00 ngày" not in request.content.decode()
-        return function_response(
-            "get_my_claims", {"relation": "all", "status": None, "handover": True}
-        )
+        return function_response("get_my_claims", {"relation": "all", "handover": True})
 
     mock_openai(world, handler)
     url = f"{BASE}/chat"

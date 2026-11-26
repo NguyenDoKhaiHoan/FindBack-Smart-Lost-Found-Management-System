@@ -136,3 +136,21 @@ def image_vectors(runtime: AIRuntime, images: list[bytes]) -> list[list[float]]:
         raise DomainError(
             503, "AI_MODEL_UNAVAILABLE", "Image embedding model unavailable"
         ) from None
+
+
+def refine_image_type(runtime: AIRuntime, data: bytes) -> str | None:
+    if runtime.image_classifier_failed:
+        return None
+    try:
+        with runtime.inference():
+            from app.modules.ai.image_clip_onnx import ClipImageClassifier
+
+            if runtime.image_classifier is None:
+                runtime.image_classifier = ClipImageClassifier(runtime.settings.ai_cpu_threads)
+            return runtime.image_classifier.classify(data)
+    except DomainError:
+        return None
+    except Exception as error:
+        logger.warning("Image type refinement unavailable (%s)", type(error).__name__)
+        runtime.image_classifier_failed = True
+        return None

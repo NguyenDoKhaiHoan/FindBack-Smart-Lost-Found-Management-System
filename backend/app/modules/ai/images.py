@@ -13,6 +13,7 @@ from app.modules.ai.inference import (
     embedding_key,
     image_vectors,
     predict_image_type,
+    refine_image_type,
 )
 from app.modules.ai.matching import open_posts
 from app.modules.ai.runtime import AIRuntime
@@ -165,6 +166,7 @@ def search_images(
         if scored
         else {}
     )
+    refined = False
     if mobile and item_kind is None:
         by_type = {}
         for image, _, score in scored:
@@ -191,6 +193,11 @@ def search_images(
             )
             if verified_photo or supported_guess or leading_match:
                 kind = first_type
+            elif len(ranked_types) > 1:
+                refined_kind = refine_image_type(runtime, compact_jpeg(data, 1024))
+                if refined_kind in by_type and by_type[refined_kind] >= 0.15:
+                    kind = refined_kind
+                    refined = True
     elif item_kind is None and kind is None and prototypes:
         near_duplicate_types = {
             label
@@ -217,7 +224,7 @@ def search_images(
             if conflicts and score < NEAR_DUPLICATE:
                 continue
         minimum = 0.38 if same_type else (0.79 if mobile and not kind else 0.70)
-        if item_kind and same_type:
+        if (item_kind or refined) and same_type:
             minimum = 0.15
         if kind == "background":
             minimum = NEAR_DUPLICATE
