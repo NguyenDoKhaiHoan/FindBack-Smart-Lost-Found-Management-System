@@ -66,7 +66,26 @@ interface ImageRequest {
   source: File | string
   type: PostType | ''
   category: string
+  itemKind: string
 }
+
+const itemKinds = [
+  ['laptop', 'Laptop'],
+  ['phone', 'Điện thoại'],
+  ['wallet', 'Ví'],
+  ['camera', 'Máy ảnh'],
+  ['backpack', 'Ba lô'],
+  ['bag', 'Túi xách'],
+  ['keys', 'Chìa khóa'],
+  ['glasses', 'Kính'],
+  ['watch', 'Đồng hồ'],
+  ['bottle', 'Bình nước'],
+  ['headphones', 'Tai nghe'],
+  ['umbrella', 'Ô hoặc dù'],
+  ['book', 'Sách hoặc sổ'],
+  ['pencil_case', 'Túi bút'],
+  ['card', 'Thẻ hoặc giấy tờ'],
+]
 
 export function ImageSearch({
   type,
@@ -80,8 +99,10 @@ export function ImageSearch({
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState('')
   const [error, setError] = useState('')
+  const [itemKind, setItemKind] = useState('')
   const search = useMutation({
-    mutationFn: ({ source, type, category }: ImageRequest) => aiApi.images(source, type, category),
+    mutationFn: ({ source, type, category, itemKind }: ImageRequest) =>
+      aiApi.images(source, type, category, itemKind),
   })
   useEffect(() => {
     if (preview) return () => URL.revokeObjectURL(preview)
@@ -90,7 +111,8 @@ export function ImageSearch({
   const sameRequest =
     search.variables?.source === source &&
     search.variables.type === type &&
-    search.variables.category === category
+    search.variables.category === category &&
+    search.variables.itemKind === itemKind
   const result = sameRequest ? search.data : undefined
   return (
     <details className="panel ai-section ai-image-search" open={postImage ? true : undefined}>
@@ -101,7 +123,8 @@ export function ImageSearch({
         className="ai-image-form"
         onSubmit={(event) => {
           event.preventDefault()
-          if (source && !error && !search.isPending) search.mutate({ source, type, category })
+          if (source && !error && !search.isPending)
+            search.mutate({ source, type, category, itemKind })
         }}
       >
         <label className="field">
@@ -121,6 +144,21 @@ export function ImageSearch({
             }}
           />
         </label>
+        <label className="field">
+          Loại đồ vật
+          <select
+            value={itemKind}
+            disabled={search.isPending}
+            onChange={(event) => setItemKind(event.target.value)}
+          >
+            <option value="">Tự nhận diện</option>
+            {itemKinds.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         {file && preview && <img className="ai-preview" src={preview} alt="Ảnh dùng để tìm kiếm" />}
         {!file && postImage && <p>Đang dùng ảnh từ tin bạn vừa xem.</p>}
         {error && (
@@ -139,14 +177,14 @@ export function ImageSearch({
       <ApiFeedback pending={search.isPending} error={sameRequest ? search.error : null} />
       {result?.detected_item_type && (
         <p role="status">
-          Loại đồ nhận diện được: <strong>{result.detected_item_type}</strong>
+          Loại đồ có thể là <strong>{result.detected_item_type}</strong>
         </p>
       )}
       {result?.indexing_pending && (
         <p role="status">Đang cập nhật ảnh. Tìm lại để kiểm tra thêm ảnh.</p>
       )}
       {result && !result.indexing_pending && !result.results.length && (
-        <p>Chưa thấy kết quả đủ gần. Hãy thử ảnh chụp rõ món đồ hoặc đổi bộ lọc.</p>
+        <p>Chưa thấy ảnh đủ giống. Bạn có thể chọn loại đồ vật hoặc thử ảnh chụp rõ hơn.</p>
       )}
       <div className="ai-card-grid">
         {result?.results.map((item) => (

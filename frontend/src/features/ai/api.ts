@@ -64,12 +64,13 @@ export const aiApi = {
       indexing_pending: boolean
       matching_mode?: 'semantic' | 'details'
     }>(`/api/ai/matches/${id}`, { auth: false }),
-  images: (source: File | string, type: PostType | '', category: string) => {
+  images: (source: File | string, type: PostType | '', category: string, itemKind?: string) => {
     const body = new FormData()
     if (typeof source === 'string') body.set('image_id', source)
     else body.set('file', source)
     if (type) body.set('type', type)
     if (category) body.set('category_id', category)
+    if (itemKind) body.set('item_kind', itemKind)
     return apiRequest<{
       results: ImageMatch[]
       indexing_pending: boolean
@@ -78,6 +79,7 @@ export const aiApi = {
       method: 'POST',
       body,
       auth: false,
+      timeoutMs: 75_000,
     })
   },
   draft: (file: File) => {
@@ -100,6 +102,10 @@ export const aiApi = {
     const body = new FormData()
     body.set('file', file)
     if (conversation) body.set('conversation_id', conversation)
-    return apiRequest<ChatReply>('/api/ai/chat/image-search', { method: 'POST', body })
+    return apiRequest<ChatReply>('/api/ai/chat/image-search', {
+      method: 'POST',
+      body,
+      timeoutMs: 75_000,
+    })
   },
 }

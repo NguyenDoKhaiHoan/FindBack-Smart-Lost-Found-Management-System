@@ -229,6 +229,7 @@
 
 .ai-chat-reply {
   background: #f7f5f3;
+  white-space: pre-wrap;
 }
 
 .ai-chat-map {

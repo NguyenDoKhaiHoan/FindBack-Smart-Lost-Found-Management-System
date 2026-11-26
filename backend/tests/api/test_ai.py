@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.modules.ai import images, matching
 from app.modules.ai.image_mobilenet import classify
 from app.modules.ai.runtime import AIRuntime
+from app.modules.claims_returns.models.claim import ReturnRecord
 from app.modules.posts.models.post import Category, Post, PostImage
 from app.modules.posts.services.image_service import MAX_IMAGE_BYTES, image_path
 from app.modules.posts.services.listings import update_search_text
@@ -309,6 +310,22 @@ def test_render_image_search_uses_public_title_of_near_duplicate(world, monkeypa
     assert response.json()["detected_item_type"] == "Điện thoại"
     assert [result["item_id"] for result in response.json()["results"]] == [str(world.ids["found"])]
 
+    corrected = world.client.post(
+        f"{BASE}/image-search", files={"file": png()}, data={"item_kind": "wallet"}
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["detected_item_type"] is None
+    assert [result["item_id"] for result in corrected.json()["results"]] == [
+        str(world.ids["second"])
+    ]
+
+    empty = world.client.post(
+        f"{BASE}/image-search", files={"file": png()}, data={"item_kind": "laptop"}
+    )
+    assert empty.status_code == 200
+    assert empty.json()["results"] == []
+    assert empty.json()["detected_item_type"] is None
+
 
 @pytest.mark.parametrize(
     ("payload", "status"),
@@ -420,6 +437,7 @@ def test_assistant_search_only_returns_real_visible_open_posts(world):
         assert {tool["name"] for tool in body["tools"]} == {
             "search_lost_items",
             "search_found_items",
+            "search_public_items",
             "get_item_details",
             "lookup_location",
             "get_directions",
@@ -427,6 +445,7 @@ def test_assistant_search_only_returns_real_visible_open_posts(world):
             "compare_results",
             "advise_recovery",
             "get_my_items",
+            "get_my_claims",
             "get_matching_items",
             "show_guide",
             "refuse_request",
@@ -869,3 +888,79 @@ def test_chat_remembers_claim_guidance_for_an_ambiguous_photo_followup(world):
     )
     assert next_turn.status_code == 200, next_turn.text
     assert "Ảnh là tùy chọn" in next_turn.json()["reply"]
+
+
+def test_chat_reads_only_related_claim_status_and_handover_time(world):
+    claim_id = world.add_claim(status="APPROVED")
+    with world.factory() as db:
+        db.get(Post, world.ids["found"]).title = "Ví thử nghiệm"
+        db.add(
+            ReturnRecord(
+                claim_id=claim_id,
+                status="ARRANGED",
+                scheduled_at=datetime(2026, 11, 27, 8, tzinfo=timezone.utc),
+                meeting_note="Private meeting note",
+            )
+        )
+        db.commit()
+
+    def handler(request):
+        assert "Private meeting note" not in request.content.decode()
+        assert "15:00 ngày" not in request.content.decode()
+        return function_response(
+            "get_my_claims", {"relation": "all", "status": None, "handover": True}
+        )
+
+    mock_openai(world, handler)
+    url = f"{BASE}/chat"
+    body = {"message": "Tài khoản của tôi có lịch bàn giao nào chưa?"}
+    for name in ("claimant", "owner"):
+        answer = world.client.post(url, json=body, headers=world.auth(name)).json()
+        assert "Ví thử nghiệm" in answer["reply"]
+        assert "15:00 ngày 27/11/2026" in answer["reply"]
+        assert "Private meeting note" not in answer["reply"]
+        assert str(claim_id) not in answer["reply"]
+        body_with_context = {**body, "conversation_id": answer["conversation_id"]}
+        assert (
+            world.client.post(url, json=body_with_context, headers=world.auth(name)).status_code
+            == 200
+        )
+    other = world.client.post(url, json=body, headers=world.auth("other")).json()
+    assert "chưa thấy" in other["reply"]
+    assert "Ví thử nghiệm" not in other["reply"]
+
+
+def test_chat_searches_both_types_but_excludes_other_known_objects(world):
+    configure_posts(world)
+    with world.factory() as db:
+        for key, title in (
+            ("lost", "Mất điện thoại gần cổng trường"),
+            ("found", "Nhặt được điện thoại ở cổng trường"),
+            ("unrelated", "Nhặt được laptop ở cổng trường"),
+        ):
+            post = db.get(Post, world.ids[key])
+            post.title = title
+            post.description = "Có thể dùng điện thoại để xem tin này."
+            post.location = "Định Công"
+            update_search_text(post)
+        db.commit()
+
+    args = {
+        "object": "điện thoại",
+        "color": None,
+        "location": "trường",
+        "region": None,
+        "date_from": None,
+        "date_through": None,
+    }
+    mock_openai(world, lambda request: function_response("search_public_items", args))
+    response = world.client.post(
+        f"{BASE}/chat",
+        json={"message": "Có tin điện thoại gần trường không?"},
+        headers=world.auth(),
+    )
+    assert response.status_code == 200, response.text
+    assert {item["item_id"] for item in response.json()["related_items"]} == {
+        str(world.ids["lost"]),
+        str(world.ids["found"]),
+    }

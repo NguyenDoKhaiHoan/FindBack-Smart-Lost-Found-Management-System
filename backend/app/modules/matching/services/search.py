@@ -78,6 +78,7 @@ def search_posts(
     query: SearchQuery,
     *,
     location_text: str | None = None,
+    location_in_title: bool = False,
     only_claimable: bool = False,
 ) -> SearchResponse:
     if query.category_id is not None and db.get(Category, query.category_id) is None:
@@ -122,7 +123,10 @@ def search_posts(
     for word in tokens(query.q or ""):
         filtered = filtered.where(Post.search_text.contains(f" {word} ", autoescape=True))
     if location_text:
-        filtered = filtered.where(Post.location.icontains(location_text, autoescape=True))
+        place = Post.location.icontains(location_text, autoescape=True)
+        if location_in_title:
+            place |= Post.title.icontains(location_text, autoescape=True)
+        filtered = filtered.where(place)
     if only_claimable:
         filtered = filtered.where(Post.completed_claim_id.is_(None))
 

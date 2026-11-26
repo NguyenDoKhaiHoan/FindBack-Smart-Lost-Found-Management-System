@@ -6,6 +6,7 @@ from pydantic import Field, ValidationError
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.ai.chat_answers import compose_answer
+from app.modules.ai.chat_claims import ClaimStatusArgs, claim_status
 from app.modules.ai.chat_guard import (
     ACCOUNT_HELP,
     REFUSALS,
@@ -15,6 +16,7 @@ from app.modules.ai.chat_guard import (
     redact_sensitive_text,
 )
 from app.modules.ai.chat_places import DirectionsArgs, directions, public_posts_at, safe_map_place
+from app.modules.ai.image_types import title_item_type
 from app.modules.ai.images import NEAR_DUPLICATE, search_images
 from app.modules.ai.matching import match_posts, open_posts
 from app.modules.ai.runtime import AIRuntime, Conversation
@@ -201,6 +203,7 @@ class EmptyArgs(AIInput):
 TOOL_SPECS = {
     "search_lost_items": (SearchArgs, "Tìm tin người khác báo mất khi người dùng nhặt được đồ."),
     "search_found_items": (SearchArgs, "Tìm tin nhặt được dựa trên món đồ người dùng mô tả."),
+    "search_public_items": (SearchArgs, "Tìm cả tin mất và tin nhặt khi chưa chỉ rõ loại tin."),
     "get_item_details": (ItemArgs, "Xem tin công khai theo UUID người dùng cung cấp."),
     "lookup_location": (
         LocationArgs,
@@ -224,6 +227,10 @@ TOOL_SPECS = {
         "bằng chứng, trao trả, hồ sơ, quản lý tin hoặc lỗi sử dụng FindBack.",
     ),
     "get_my_items": (EmptyArgs, "Liệt kê tin mất đồ đang mở của tài khoản đang đăng nhập."),
+    "get_my_claims": (
+        ClaimStatusArgs,
+        "Tra trạng thái yêu cầu nhận đồ hoặc lịch bàn giao thật của tài khoản đang đăng nhập.",
+    ),
     "get_matching_items": (EmptyArgs, "Tìm gợi ý ứng với tin mất đồ mà người dùng đã đăng."),
     "show_guide": (GuideArgs, "Hướng dẫn đăng tin, tìm đồ, nhận đồ, xác minh hoặc hỏi làm rõ."),
     "refuse_request": (
@@ -234,6 +241,7 @@ TOOL_SPECS = {
 RESULT_TOOLS = {
     "search_lost_items",
     "search_found_items",
+    "search_public_items",
     "get_item_details",
     "lookup_location",
     "get_my_items",
@@ -273,7 +281,9 @@ def cards_by_ids(db: Session, ids: list[UUID], reasons: list[str]) -> list[ChatI
     ]
 
 
-def search_items(db: Session, args: SearchArgs, post_type: Literal["LOST", "FOUND"]) -> ChatResult:
+def search_items(
+    db: Session, args: SearchArgs, post_type: Literal["LOST", "FOUND"] | None
+) -> ChatResult:
     if not (
         args.object
         or args.color
@@ -294,27 +304,37 @@ def search_items(db: Session, args: SearchArgs, post_type: Literal["LOST", "FOUN
             location_code=args.region,
             event_from=day_bound(args.date_from),
             event_to=day_bound(args.date_through, exclusive_end=True),
-            page_size=5,
+            page_size=25,
         )
     except (ValidationError, OverflowError):
         return ChatResult(reply="Bạn kiểm tra lại khoảng ngày muốn tìm nhé.")
     location = args.location
+    if location and location.casefold().startswith("gần "):
+        location = location[4:].strip()
     if args.region and location and location.casefold() == LOCATIONS[args.region].casefold():
         location = None
-    response = search_posts(db, query, location_text=location, only_claimable=True)
-    kind = "tin nhặt được" if post_type == "FOUND" else "tin mất đồ"
-    reasons = [f"Đúng loại tin bạn đang tìm ({kind})"]
+    response = search_posts(
+        db, query, location_text=location, location_in_title=True, only_claimable=True
+    )
+    kind = {"FOUND": "tin nhặt được", "LOST": "tin mất đồ"}.get(post_type, "tin")
+    reasons = [f"Đúng loại tin bạn đang tìm ({kind})"] if post_type else []
     if query.q:
         reasons.append(f"Tiêu đề hoặc mô tả khớp từ khóa “{query.q}”")
     if location:
-        reasons.append(f"Địa điểm có “{location}”")
+        reasons.append(f"Địa điểm hoặc tiêu đề có “{location}”")
     if query.location_code:
         reasons.append(f"Thuộc khu vực {LOCATIONS[query.location_code]}")
     if query.color_code:
         reasons.append("Màu sắc khớp với bộ lọc")
     if query.event_from or query.event_to:
         reasons.append("Thời điểm nằm trong khoảng bạn hỏi")
-    items = cards_by_ids(db, [item.id for item in response.items], reasons)
+    object_type = title_item_type(args.object)
+    matching_ids = [
+        item.id
+        for item in response.items
+        if object_type is None or title_item_type(item.title) in (None, object_type)
+    ]
+    items = cards_by_ids(db, matching_ids[:5], reasons)
     reply = (
         f"Mình tìm thấy {len(items)} {kind} đang mở theo thông tin bạn đưa."
         if items
@@ -518,6 +538,8 @@ def execute_tool(
     if isinstance(args, AdviceArgs):
         result = ChatResult(reply=RECOVERY_GUIDANCE[args.topic])
         return compose_answer(runtime, context, message, result)
+    if isinstance(args, ClaimStatusArgs):
+        return claim_status(db, user_id, args)
     if isinstance(args, SearchArgs | LocationArgs | DirectionsArgs):
         for value in args.model_dump().values():
             if isinstance(value, str) and (reason := local_refusal(value)):
@@ -528,6 +550,8 @@ def execute_tool(
         return search_items(db, args, "FOUND")
     if name == "search_lost_items":
         return search_items(db, args, "LOST")
+    if name == "search_public_items":
+        return search_items(db, args, None)
     if name == "get_my_items":
         return my_items(db, runtime, user_id)
     if name == "get_matching_items":
@@ -592,6 +616,10 @@ def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> Cha
                     "Nếu yêu cầu trộn nội dung hợp lệ và bị cấm, từ chối toàn bộ. "
                     "Cho phép câu hỏi cách bảo vệ dữ liệu, xử lý tin có giấy tờ, sửa hồ sơ "
                     "của chính mình, hoặc tránh lừa đảo, kể cả có nhắc số điện thoại hoặc OTP. "
+                    "Dùng get_my_claims khi người dùng yêu cầu xem trạng thái hoặc lịch bàn "
+                    "giao thực tế của tài khoản. Dùng claimant cho yêu cầu họ gửi, reviewer "
+                    "cho yêu cầu gửi đến tin của họ, all khi chưa rõ. Đặt handover=true nếu "
+                    "họ muốn biết lịch bàn giao và status=null nếu chưa chọn trạng thái. "
                     "Dùng advise_recovery khi hỏi nên làm gì. Chọn claim_status cho chờ duyệt "
                     "hoặc bị từ chối, claim_evidence khi hỏi thiếu ảnh hoặc bổ sung bằng chứng "
                     "của yêu cầu, handover_problem khi giao hoặc nhận nhầm hay đã xác nhận nhầm, "
@@ -612,8 +640,12 @@ def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> Cha
                     "Nếu chỉ nói 'so sánh hai tin đầu', dùng first 1, second 2. "
                     "Nếu người dùng mô tả đồ vừa mất, tìm tin nhặt được; nếu hỏi về tin mất "
                     "đã đăng của mình, dùng get_matching_items. Nếu vừa nhặt được và muốn "
-                    "tìm người mất, dùng search_lost_items. Chỉ lấy tên vật thể làm object, "
-                    "tách màu sang mã color và địa điểm sang location (ví dụ 'thư viện'); "
+                    "tìm người mất, dùng search_lost_items. Dùng search_public_items nếu chỉ "
+                    "hỏi có tin về món đồ hay không và chưa nêu mất hay nhặt. "
+                    "Khi người dùng yêu cầu thu hẹp cùng một lượt tìm, giữ tiêu chí còn áp dụng "
+                    "từ các lượt trước và cập nhật phần họ đổi. Chỉ lấy tên vật thể làm object, "
+                    "tách màu sang mã color và địa điểm sang location "
+                    "(ví dụ 'gần trường' dùng 'trường'); "
                     "region chỉ dùng cho thành phố được nêu rõ. Dùng null cho thông tin thiếu. "
                     "Đổi ngày tương đối sang YYYY-MM-DD nếu xác định được. Với tin nhặt được, "
                     "dùng ngày mất làm mốc từ ngày, trừ khi được yêu cầu giới hạn đến ngày mất. "
@@ -644,9 +676,12 @@ def chat(db: Session, runtime: AIRuntime, user_id: UUID, body: ChatInput) -> Cha
             if operation in RESULT_TOOLS:
                 remember_results(context, result)
             context.history.append({"role": "user", "content": message})
-            context.history.append(
-                {"role": "assistant", "content": redact_sensitive_text(result.reply)}
+            history_reply = (
+                "Đã kiểm tra yêu cầu nhận đồ của tài khoản hiện tại."
+                if operation == "get_my_claims"
+                else redact_sensitive_text(result.reply)
             )
+            context.history.append({"role": "assistant", "content": history_reply})
 
     return chat_response(conversation_id, result, reviewable=operation in RESULT_TOOLS)
 
@@ -677,7 +712,7 @@ def chat_image(
         result = ChatResult(reply=reply, related_items=items, action="explore")
         remember_results(context, result)
         context.history.append({"role": "user", "content": "Tìm đồ bằng ảnh"})
-        context.history.append({"role": "assistant", "content": "Đã tìm đồ bằng ảnh."})
+        context.history.append({"role": "assistant", "content": reply})
     return chat_response(conversation_id, result, reviewable=True)
 
 

@@ -65,7 +65,7 @@ AI_GLOBAL_REQUESTS_PER_MINUTE=40
 | Phương thức và đường dẫn | Đầu vào | Kết quả |
 | --- | --- | --- |
 | `GET /api/ai/matches/{item_id}` | UUID của tin công khai | Tối đa 5 tin khác loại, điểm 0–1, lý do và dữ liệu hiển thị |
-| `POST /api/ai/image-search` | Form gồm `file` hoặc `image_id` công khai, tùy chọn `type` và `category_id` | Tối đa 5 tin đang mở, mỗi tin lấy ảnh có điểm cao nhất |
+| `POST /api/ai/image-search` | Form gồm `file` hoặc `image_id` công khai, tùy chọn `type`, `category_id` và mã loại đồ `item_kind` | Tối đa 5 tin đang mở, mỗi tin lấy ảnh có điểm cao nhất |
 | `POST /api/ai/generate-post` | Form gồm `file`, Bearer JWT | `title`, tên và UUID danh mục, mã màu, `description`, ghi chú kiểm tra bản nháp |
 | `POST /api/ai/chat` | JSON gồm `message` tối đa 500 ký tự, `conversation_id` tùy chọn, một thao tác nhanh như `compare: {first, second}` và Bearer JWT | `reply`, UUID hội thoại, `related_items`, hành động giao diện và trạng thái chọn tin |
 | `POST /api/ai/chat/image-search` | Form gồm `file`, `conversation_id` tùy chọn và Bearer JWT | Kết quả tin có ảnh tương tự trong hội thoại |
@@ -81,6 +81,8 @@ Các yêu cầu POST gửi `Content-Length`. Tệp nhận JPEG, PNG và WebP, t�
 - **Lưu embedding.** Migration `0005_ai_embeddings` thêm `ai_embedding_key` và `ai_embedding` dạng JSON vào `posts` và `post_images`. Fingerprint giúp tái lập chỉ mục khi văn bản, mô hình hoặc tệp ảnh cũ thay đổi. Truy vấn công khai loại tin đã ẩn, xóa hoặc hoàn tất. Mỗi worker giới hạn một phiên suy luận CPU và một yêu cầu chờ. Các API đối chiếu theo quy tắc tại `/api/v1/matches` tiếp tục phục vụ luồng hiện có.
 
 ## Demo
+
+Khi ảnh khó nhận diện, có thể chọn **Loại đồ vật** trước khi tìm để giới hạn kết quả. Chatbot đọc trạng thái yêu cầu và giờ hẹn bàn giao của tài khoản hiện tại khi người dùng hỏi trực tiếp.
 
 1. Đăng hai tin có cùng món đồ, một tin mất và một tin nhặt được. Đặt thời điểm nhặt sau thời điểm mất. Mở trang chi tiết để xem ảnh, điểm và lý do gợi ý.
 2. Vào **Khám phá → Tìm đồ bằng hình ảnh**. Chọn ảnh và bấm **Tìm đồ tương tự**. Có thể bắt đầu từ liên kết trong chi tiết tin có ảnh. Bộ lọc loại tin và danh mục trên trang khám phá cũng áp dụng cho kết quả ảnh.

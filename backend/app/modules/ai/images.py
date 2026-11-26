@@ -132,7 +132,10 @@ def search_images(
     category_id: UUID | None,
     *,
     exclude_id: UUID | None = None,
+    item_kind: str | None = None,
 ) -> ImageSearchResponse:
+    if item_kind is not None and item_kind not in ITEM_TYPES:
+        raise DomainError(422, "AI_INVALID_ITEM_TYPE", "Unknown item type for image search")
     query = open_posts()
     if post_type is not None:
         query = query.where(Post.type == post_type.value)
@@ -162,21 +165,33 @@ def search_images(
         if scored
         else {}
     )
-    if mobile:
+    if mobile and item_kind is None:
         by_type = {}
         for image, _, score in scored:
             label = title_item_type(titles.get(image.post_id))
             if label:
                 by_type[label] = max(by_type.get(label, 0), score)
+        classified_kind = kind
+        kind = None
         ranked_types = sorted(((score, label) for label, score in by_type.items()), reverse=True)
         if ranked_types:
             first_score, first_type = ranked_types[0]
             next_score = ranked_types[1][0] if len(ranked_types) > 1 else 0
-            if first_score >= NEAR_DUPLICATE > next_score or (
-                len(ranked_types) > 1 and first_score >= 0.50 and first_score - next_score >= 0.18
-            ):
+            verified_photo = first_score >= NEAR_DUPLICATE > next_score
+            supported_guess = (
+                first_type == classified_kind
+                and first_score >= 0.55
+                and first_score - next_score >= 0.12
+            )
+            leading_match = (
+                classified_kind is None
+                and len(ranked_types) > 1
+                and first_score >= 0.46
+                and first_score - next_score >= 0.25
+            )
+            if verified_photo or supported_guess or leading_match:
                 kind = first_type
-    elif kind is None and prototypes:
+    elif item_kind is None and kind is None and prototypes:
         near_duplicate_types = {
             label
             for image, _, score in scored
@@ -184,6 +199,7 @@ def search_images(
         }
         if len(near_duplicate_types) == 1:
             kind = next(iter(near_duplicate_types))
+    kind = item_kind or kind
     best = {}
     for image, vector, score in scored:
         same_type = False
@@ -196,9 +212,13 @@ def search_images(
             )
             conflicts = any(label not in (None, kind) for label in (from_title, from_photo))
             same_type = kind in (from_title, from_photo) and not conflicts
+            if item_kind and (conflicts or (not same_type and score < NEAR_DUPLICATE)):
+                continue
             if conflicts and score < NEAR_DUPLICATE:
                 continue
-        minimum = 0.38 if same_type else 0.70
+        minimum = 0.38 if same_type else (0.79 if mobile and not kind else 0.70)
+        if item_kind and same_type:
+            minimum = 0.15
         if kind == "background":
             minimum = NEAR_DUPLICATE
         if score < minimum:
@@ -231,5 +251,11 @@ def search_images(
     return ImageSearchResponse(
         results=results,
         indexing_pending=pending,
-        detected_item_type=ITEM_TYPES[kind][0] if kind in ITEM_TYPES else None,
+        detected_item_type=(
+            ITEM_TYPES[kind][0]
+            if item_kind is None
+            and kind in ITEM_TYPES
+            and any(item.same_item_type for item in results)
+            else None
+        ),
     )
