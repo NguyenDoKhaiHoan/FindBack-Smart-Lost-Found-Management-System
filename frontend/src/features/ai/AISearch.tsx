@@ -67,6 +67,7 @@ interface ImageRequest {
   type: PostType | ''
   category: string
   itemKind: string
+  itemName: string
 }
 
 const itemKinds = [
@@ -100,19 +101,24 @@ export function ImageSearch({
   const [preview, setPreview] = useState('')
   const [error, setError] = useState('')
   const [itemKind, setItemKind] = useState('')
+  const [customName, setCustomName] = useState('')
+  const custom = itemKind === 'custom'
+  const itemName = custom ? customName.trim() : ''
   const search = useMutation({
-    mutationFn: ({ source, type, category, itemKind }: ImageRequest) =>
-      aiApi.images(source, type, category, itemKind),
+    mutationFn: ({ source, type, category, itemKind, itemName }: ImageRequest) =>
+      aiApi.images(source, type, category, { itemKind: itemName ? '' : itemKind, itemName }),
   })
   useEffect(() => {
     if (preview) return () => URL.revokeObjectURL(preview)
   }, [preview])
   const source = file || postImage
+  const canSearch = !!source && !error && !search.isPending && (!custom || !!itemName)
   const sameRequest =
     search.variables?.source === source &&
     search.variables.type === type &&
     search.variables.category === category &&
-    search.variables.itemKind === itemKind
+    search.variables.itemKind === itemKind &&
+    search.variables.itemName === itemName
   const result = sameRequest ? search.data : undefined
   const typeResults = result?.type_results ?? []
   return (
@@ -124,8 +130,7 @@ export function ImageSearch({
         className="ai-image-form"
         onSubmit={(event) => {
           event.preventDefault()
-          if (source && !error && !search.isPending)
-            search.mutate({ source, type, category, itemKind })
+          if (source && canSearch) search.mutate({ source, type, category, itemKind, itemName })
         }}
       >
         <label className="field">
@@ -158,8 +163,22 @@ export function ImageSearch({
                 {label}
               </option>
             ))}
+            <option value="custom">Khác (nhập tên đồ vật)</option>
           </select>
         </label>
+        {custom && (
+          <label className="field">
+            Tên đồ vật
+            <input
+              value={customName}
+              onChange={(event) => setCustomName(event.currentTarget.value)}
+              placeholder="Ví dụ: Vợt cầu lông"
+              maxLength={100}
+              required
+              disabled={search.isPending}
+            />
+          </label>
+        )}
         {file && preview && <img className="ai-preview" src={preview} alt="Ảnh dùng để tìm kiếm" />}
         {!file && postImage && <p>Đang dùng ảnh từ tin bạn vừa xem.</p>}
         {error && (
@@ -167,11 +186,7 @@ export function ImageSearch({
             {error}
           </p>
         )}
-        <button
-          className="button button-secondary"
-          type="submit"
-          disabled={!source || !!error || search.isPending}
-        >
+        <button className="button button-secondary" type="submit" disabled={!canSearch}>
           Tìm đồ tương tự
         </button>
       </form>
@@ -188,7 +203,9 @@ export function ImageSearch({
         <p>
           {typeResults.length
             ? 'Chưa thấy ảnh đủ giống.'
-            : 'Chưa thấy ảnh đủ giống. Bạn có thể chọn loại đồ vật hoặc thử ảnh chụp rõ hơn.'}
+            : custom
+              ? 'Chưa thấy tin có ảnh tương tự hoặc khớp tên đồ vật.'
+              : 'Chưa thấy ảnh đủ giống. Bạn có thể chọn loại đồ vật hoặc thử ảnh chụp rõ hơn.'}
         </p>
       )}
       <div className="ai-card-grid">
@@ -206,7 +223,7 @@ export function ImageSearch({
       </div>
       {typeResults.length > 0 && (
         <>
-          <h3>Tin cùng loại đồ vật</h3>
+          <h3>{custom ? 'Tin khớp tên đồ vật' : 'Tin cùng loại đồ vật'}</h3>
           <div className="ai-card-grid">
             {typeResults.map((item) => (
               <AICard key={item.item_id} item={item} />

@@ -80,7 +80,9 @@ def check_values(db: Session, values: dict) -> None:
 
 
 def update_search_text(post: Post) -> None:
-    words = sorted(tokens(f"{post.title or ''} {post.description or ''}"))
+    words = sorted(
+        tokens(" ".join(value for value in (post.item_name, post.title, post.description) if value))
+    )
     post.search_text = f" {' '.join(words)} "
 
 

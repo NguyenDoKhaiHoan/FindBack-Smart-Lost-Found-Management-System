@@ -10,6 +10,7 @@ import { clearSession, setSession } from '../src/lib/api/session-store'
 const postId = '11111111-1111-4111-8111-111111111111'
 const actorId = '22222222-2222-4222-8222-222222222222'
 const category = { id: '33333333-3333-4333-8333-333333333333', name: 'Ví và túi xách' }
+const otherCategory = { id: '44444444-4444-4444-8444-444444444444', name: 'Khác' }
 const item = {
   id: postId,
   type: 'FOUND',
@@ -50,7 +51,7 @@ beforeEach(() => {
   postImages = []
   request.mockReset()
   request.mockImplementation(async (path: string) => {
-    if (path === '/api/v1/categories') return Response.json([category])
+    if (path === '/api/v1/categories') return Response.json([category, otherCategory])
     if (path.startsWith('/api/v1/search?'))
       return Response.json({ items: [item], pagination: { total: 1, page: 1, total_pages: 1 } })
     if (path === `/api/v1/posts/${postId}`)
@@ -141,6 +142,42 @@ describe('live public and protected screens', () => {
     expect(await screen.findByRole('option', { name: category.name })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Loại tin' })).toHaveValue('FOUND')
     expect(screen.getByRole('main').querySelector('button[type=submit]')).toBeEnabled()
+  })
+
+  it('lets users enter a custom item name when posting in Khác', async () => {
+    setSession('account-test', actorId, Date.now() + 60000)
+    const ui = setup('/dang-tin?loai=found')
+    const select = await screen.findByRole('combobox', { name: 'Danh mục' })
+    expect(screen.queryByRole('textbox', { name: /Tên đồ vật/ })).not.toBeInTheDocument()
+    await ui.selectOptions(select, otherCategory.id)
+    const name = screen.getByRole('textbox', { name: /Tên đồ vật/ })
+    await ui.type(name, 'Vợt cầu lông')
+    await ui.selectOptions(select, category.id)
+    expect(name).not.toBeInTheDocument()
+    await ui.selectOptions(select, otherCategory.id)
+    expect(screen.getByRole('textbox', { name: /Tên đồ vật/ })).toHaveValue('Vợt cầu lông')
+  })
+
+  it('sends a custom name and labels keyword matches separately from photos', async () => {
+    const defaultRequest = request.getMockImplementation()!
+    request.mockImplementation(async (path, config) => {
+      if (path !== '/api/ai/image-search') return defaultRequest(path, config)
+      expect(config.body.get('item_name')).toBe('Vợt cầu lông')
+      expect(config.body.has('item_kind')).toBe(false)
+      return Response.json({
+        results: [],
+        type_results: [{ ...item, item_id: postId, title: 'Nhặt được vợt' }],
+        indexing_pending: false,
+      })
+    })
+    const ui = setup('/kham-pha?anh=source-image')
+    await ui.selectOptions(await screen.findByRole('combobox', { name: 'Loại đồ vật' }), 'custom')
+    const search = screen.getByRole('button', { name: 'Tìm đồ tương tự' })
+    expect(search).toBeDisabled()
+    await ui.type(screen.getByRole('textbox', { name: 'Tên đồ vật' }), 'Vợt cầu lông')
+    await ui.click(search)
+    expect(await screen.findByRole('heading', { name: 'Tin khớp tên đồ vật' })).toBeVisible()
+    expect(screen.getByText('Nhặt được vợt')).toBeVisible()
   })
 
   it('verifies the admin role through the account endpoint before requesting admin data', async () => {

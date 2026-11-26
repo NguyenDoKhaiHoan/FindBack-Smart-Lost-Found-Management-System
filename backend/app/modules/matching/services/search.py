@@ -16,7 +16,7 @@ from app.modules.matching.schemas.contracts import (
 )
 from app.modules.matching.services.scoring import tokens
 from app.modules.posts.models.post import Category, Post
-from app.modules.posts.repositories.posts import public_post_query
+from app.modules.posts.repositories.posts import post_keyword_filters, public_post_query
 from app.modules.posts.services.catalog import LOCATIONS
 from app.shared.errors import DomainError
 
@@ -120,8 +120,7 @@ def search_posts(
         filtered = filtered.where(Post.event_time >= query.event_from.astimezone(timezone.utc))
     if query.event_to is not None:
         filtered = filtered.where(Post.event_time < query.event_to.astimezone(timezone.utc))
-    for word in tokens(query.q or ""):
-        filtered = filtered.where(Post.search_text.contains(f" {word} ", autoescape=True))
+    filtered = filtered.where(*post_keyword_filters(tokens(query.q or "")))
     if location_text:
         place = Post.location.icontains(location_text, autoescape=True)
         if location_in_title:

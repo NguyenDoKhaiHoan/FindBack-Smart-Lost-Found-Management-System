@@ -268,6 +268,7 @@ export function ItemDetailPage() {
             </div>
           )}
           <h2>Thông tin đồ vật</h2>
+          {post.item_name && <p>Tên đồ vật: {post.item_name}</p>}
           <p className="preserve-lines">{post.description ?? 'Chưa có mô tả.'}</p>
           {post.location && (
             <p className="live-actions">
@@ -416,6 +417,10 @@ function PostEditor({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const editor = useRef<HTMLFormElement>(null)
+  const [categoryId, setCategoryId] = useState(post?.category_id ?? '')
+  const [customName, setCustomName] = useState(post?.item_name ?? '')
+  const otherCategory = categories.find((category) => category.name === 'Khác')
+  const isOtherCategory = otherCategory?.id === categoryId
   const [files, setFiles] = useState<File[]>([])
   const [fileSelection, setFileSelection] = useState(0)
   const [savedId, setSavedId] = useState<string | null>(null)
@@ -445,15 +450,20 @@ function PostEditor({
     onSuccess: (id) => navigate(`/do-vat/${id}`, { replace: true }),
   })
   function applyDraft(draft: Draft) {
+    if (draft.category_id) setCategoryId(draft.category_id)
     const values = {
       title: draft.title.trim(),
       description: draft.description.trim(),
-      category_id: draft.category_id,
       color_code: draft.color,
     }
     for (const [name, value] of Object.entries(values)) {
       const field = editor.current?.elements.namedItem(name)
-      if (value && (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) {
+      if (
+        value &&
+        (field instanceof HTMLInputElement ||
+          field instanceof HTMLTextAreaElement ||
+          field instanceof HTMLSelectElement)
+      ) {
         field.value = value
       }
     }
@@ -463,9 +473,11 @@ function PostEditor({
     if (save.isPending || fileError) return
     const form = new FormData(event.currentTarget)
     const value = (key: string) => String(form.get(key) ?? '').trim()
+    const itemName = isOtherCategory ? value('item_name') : ''
     const body: PostInput = {
       title: value('title'),
       category_id: value('category_id'),
+      ...(itemName || post?.item_name ? { item_name: itemName || null } : {}),
       location: value('location'),
       location_code: value('location_code'),
       description: value('description'),
@@ -494,7 +506,12 @@ function PostEditor({
         </label>
         <label className="field">
           Danh mục
-          <select name="category_id" required defaultValue={post?.category_id ?? ''}>
+          <select
+            name="category_id"
+            required
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.currentTarget.value)}
+          >
             <option value="">Chọn danh mục</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -503,6 +520,18 @@ function PostEditor({
             ))}
           </select>
         </label>
+        {isOtherCategory && (
+          <label className="field">
+            Tên đồ vật (không bắt buộc)
+            <input
+              name="item_name"
+              maxLength={100}
+              placeholder="Ví dụ: Vợt cầu lông"
+              value={customName}
+              onChange={(event) => setCustomName(event.currentTarget.value)}
+            />
+          </label>
+        )}
         <label className="field">
           Khu vực
           <select name="location_code" defaultValue={post?.location_code ?? 'OTHER'}>

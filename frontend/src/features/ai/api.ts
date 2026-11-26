@@ -64,13 +64,19 @@ export const aiApi = {
       indexing_pending: boolean
       matching_mode?: 'semantic' | 'details'
     }>(`/api/ai/matches/${id}`, { auth: false }),
-  images: (source: File | string, type: PostType | '', category: string, itemKind?: string) => {
+  images: (
+    source: File | string,
+    type: PostType | '',
+    category: string,
+    { itemKind, itemName }: { itemKind: string; itemName: string },
+  ) => {
     const body = new FormData()
     if (typeof source === 'string') body.set('image_id', source)
     else body.set('file', source)
     if (type) body.set('type', type)
     if (category) body.set('category_id', category)
     if (itemKind) body.set('item_kind', itemKind)
+    if (itemName) body.set('item_name', itemName)
     return apiRequest<{
       results: ImageMatch[]
       type_results?: AIItem[]

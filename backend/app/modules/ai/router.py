@@ -55,6 +55,7 @@ def images(
     type: Annotated[PostType | None, Form()] = None,
     category_id: Annotated[UUID | None, Form()] = None,
     item_kind: Annotated[str | None, Form(max_length=24)] = None,
+    item_name: Annotated[str | None, Form(max_length=100)] = None,
 ) -> ImageSearchResponse:
     runtime.require_enabled("image_search")
     runtime.throttle("image_search", client_id(request))
@@ -62,7 +63,13 @@ def images(
         raise DomainError(422, "AI_IMAGE_REQUIRED", "Provide a file or a public post image ID")
     if file is not None:
         return search_images(
-            db, runtime, upload_bytes(file), type, category_id, item_kind=item_kind
+            db,
+            runtime,
+            upload_bytes(file),
+            type,
+            category_id,
+            item_kind=item_kind,
+            item_name=item_name,
         )
 
     image = db.scalar(
@@ -81,7 +88,14 @@ def images(
             raise DomainError(404, "IMAGE_NOT_FOUND", "Post image not found") from None
     clean, _ = clean_image(data, image.mime_type)
     return search_images(
-        db, runtime, clean, type, category_id, exclude_id=image.post_id, item_kind=item_kind
+        db,
+        runtime,
+        clean,
+        type,
+        category_id,
+        exclude_id=image.post_id,
+        item_kind=item_kind,
+        item_name=item_name,
     )
 
 

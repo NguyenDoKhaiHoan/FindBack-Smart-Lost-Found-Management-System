@@ -378,6 +378,55 @@ def test_image_search_can_suggest_public_same_type_posts_without_similar_photos(
     assert "image_similarity" not in result["type_results"][0]
 
 
+def test_custom_post_name_is_searchable_in_public_listing_and_image_search(world, monkeypatch):
+    with world.factory() as db:
+        category_id = db.scalar(select(Category.id).where(Category.name == "Khác"))
+        hidden = db.get(Post, world.ids["hidden"])
+        hidden.item_name = "Vợt cầu lông"
+        update_search_text(hidden)
+        db.commit()
+
+    payload = {
+        "type": "FOUND",
+        "item_name": "  Vợt cầu lông  ",
+        "category_id": str(category_id),
+        "title": "Nhặt được đồ ở công viên",
+        "description": "Đồ có cán đen và bọc đỏ",
+        "event_time": EVENT.isoformat(),
+        "location": "Công viên",
+        "location_code": "VN-HN",
+    }
+    posts = "/api/v1/posts"
+    created = world.client.post(posts, json=payload, headers=world.auth())
+    assert created.status_code == 201, created.text
+    post_url = f"{posts}/{created.json()['id']}"
+    assert world.client.get(post_url).json()["item_name"] == "Vợt cầu lông"
+
+    def find_by_name(name):
+        matches = world.client.get("/api/v1/search", params={"q": name})
+        assert matches.status_code == 200, matches.text
+        return [item["id"] for item in matches.json()["items"]]
+
+    assert find_by_name("VỢT CẦU LÔNG") == [created.json()["id"]]
+
+    def embeddings(db, runtime, query, data):
+        assert list(db.scalars(query.with_only_columns(Post.id))) == [UUID(created.json()["id"])]
+        return None, [], False
+
+    monkeypatch.setattr(images, "image_embeddings", embeddings)
+    response = world.client.post(
+        f"{BASE}/image-search", files={"file": png()}, data={"item_name": "Vợt cầu lông"}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["results"] == []
+    assert [item["item_id"] for item in response.json()["type_results"]] == [created.json()["id"]]
+
+    updated = world.client.patch(post_url, json={"item_name": "Vợt tennis"}, headers=world.auth())
+    assert updated.status_code == 200, updated.text
+    assert find_by_name("Vợt cầu lông") == []
+    assert find_by_name("Vợt tennis") == [created.json()["id"]]
+
+
 @pytest.mark.parametrize(
     ("payload", "status"),
     [

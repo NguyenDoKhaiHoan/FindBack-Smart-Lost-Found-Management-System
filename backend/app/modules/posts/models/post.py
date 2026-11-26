@@ -48,6 +48,7 @@ class Post(Base):
         ForeignKey("findback_api.categories.id"), index=True
     )
     category: Mapped[Category | None] = relationship(lazy="raise")
+    item_name: Mapped[str | None] = mapped_column(String(100))
     title: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(String(255))

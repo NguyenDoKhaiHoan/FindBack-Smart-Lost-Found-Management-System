@@ -18,7 +18,9 @@ from app.modules.ai.inference import (
 from app.modules.ai.matching import open_posts
 from app.modules.ai.runtime import AIRuntime
 from app.modules.ai.schemas import ImageCard, ImageSearchResponse, ItemCard
+from app.modules.matching.services.scoring import tokens
 from app.modules.posts.models.post import Post, PostImage
+from app.modules.posts.repositories.posts import post_keyword_filters
 from app.modules.posts.schemas.post import PostType
 from app.modules.posts.services.image_service import MAX_IMAGE_BYTES, clean_image, image_path
 from app.shared.errors import DomainError
@@ -134,10 +136,14 @@ def search_images(
     *,
     exclude_id: UUID | None = None,
     item_kind: str | None = None,
+    item_name: str | None = None,
 ) -> ImageSearchResponse:
     if item_kind is not None and item_kind not in ITEM_TYPES:
         raise DomainError(422, "AI_INVALID_ITEM_TYPE", "Unknown item type for image search")
-    query = open_posts()
+    keywords = tokens(item_name or "")
+    if item_name is not None and (not keywords or item_kind is not None):
+        raise DomainError(422, "AI_INVALID_ITEM_NAME", "Provide an item name or a preset item type")
+    query = open_posts().where(*post_keyword_filters(keywords))
     if post_type is not None:
         query = query.where(Post.type == post_type.value)
     if category_id is not None:
@@ -148,14 +154,15 @@ def search_images(
         reference, vectors, pending = image_embeddings(db, runtime, query, data)
         prototypes = runtime.image_prototypes
     mobile = runtime.image_backend == "mobilenet"
+    detect = item_kind is None and not keywords
     if mobile:
         from app.modules.ai.image_mobilenet import classify, likeness
 
         compare = likeness
-        kind = classify(reference) if reference else None
+        kind = classify(reference) if detect and reference else None
     else:
         compare = cosine_similarity
-        kind = predict_image_type(reference, prototypes) if reference else None
+        kind = predict_image_type(reference, prototypes) if detect and reference else None
     scored = (
         [(image, vector, round(compare(reference, vector), 4)) for image, vector in vectors]
         if reference
@@ -163,11 +170,11 @@ def search_images(
     )
     titles = (
         dict(db.execute(query.with_only_columns(Post.id, Post.title)).tuples().all())
-        if scored
+        if scored and not keywords
         else {}
     )
     refined = False
-    if mobile and item_kind is None:
+    if mobile and detect:
         by_type = {}
         for image, _, score in scored:
             label = title_item_type(titles.get(image.post_id))
@@ -195,7 +202,7 @@ def search_images(
             kind = refine_image_type(runtime, compact_jpeg(data, 1024))
             refined = kind in ITEM_TYPES
             kind = kind or supported_kind
-    elif item_kind is None and kind is None and prototypes:
+    elif detect and kind is None and prototypes:
         near_duplicate_types = {
             label
             for image, _, score in scored
@@ -253,24 +260,26 @@ def search_images(
         if (post := visible.get(image.post_id)) is not None
     ]
     type_results = []
-    if not results and kind in ITEM_TYPES:
-        aliases = ITEM_TYPES[kind][1]
-        matches = query.where(
-            or_(*(Post.title.icontains(alias, autoescape=True) for alias in aliases))
-        )
+    if not results and (keywords or kind in ITEM_TYPES):
+        matches = query
+        if not keywords:
+            aliases = ITEM_TYPES[kind][1]
+            matches = matches.where(
+                or_(*(Post.title.icontains(alias, autoescape=True) for alias in aliases))
+            )
         posts = db.scalars(
             matches.options(selectinload(Post.images))
             .order_by(Post.created_at.desc(), Post.id)
-            .limit(50)
+            .limit(5 if keywords else 50)
         )
         type_results = [
-            ItemCard.from_post(post) for post in posts if title_item_type(post.title) == kind
+            ItemCard.from_post(post)
+            for post in posts
+            if keywords or title_item_type(post.title) == kind
         ][:5]
     return ImageSearchResponse(
         results=results,
         type_results=type_results,
         indexing_pending=pending,
-        detected_item_type=ITEM_TYPES[kind][0]
-        if item_kind is None and kind in ITEM_TYPES
-        else None,
+        detected_item_type=ITEM_TYPES[kind][0] if detect and kind in ITEM_TYPES else None,
     )

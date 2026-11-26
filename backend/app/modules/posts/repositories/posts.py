@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import select
@@ -8,6 +9,10 @@ from app.modules.posts.models.post import Post
 
 def public_post_query():
     return select(Post).where(Post.deleted_at.is_(None), Post.is_hidden.is_(False))
+
+
+def post_keyword_filters(words: Iterable[str]):
+    return (Post.search_text.contains(f" {word} ", autoescape=True) for word in words)
 
 
 class PostRepository:

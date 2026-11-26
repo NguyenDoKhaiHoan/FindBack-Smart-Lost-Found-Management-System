@@ -81,6 +81,7 @@ export interface PostListItem {
   created_at: string
 }
 export interface Post extends PostListItem {
+  item_name?: string | null
   description: string | null
   location_code: string | null
   color_code: string | null
@@ -90,6 +91,7 @@ export interface Post extends PostListItem {
 }
 export interface PostInput {
   category_id: string
+  item_name?: string | null
   title: string
   description: string
   location: string

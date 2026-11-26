@@ -29,6 +29,8 @@ Longitude = Annotated[Decimal, Field(ge=-180, le=180, max_digits=9, decimal_plac
 class _PostEditable(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    item_name: str | None = Field(default=None, min_length=1, max_length=100)
+
     @field_validator("event_time", check_fields=False)
     @classmethod
     def require_offset(cls, value: datetime | None) -> datetime | None:
@@ -96,6 +98,7 @@ class PostResponse(BaseModel):
     user_id: UUID
     type: PostType
     category_id: UUID | None
+    item_name: str | None = None
     title: str | None
     description: str | None
     location: str | None
